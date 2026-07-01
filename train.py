@@ -159,14 +159,18 @@ def main(args):
 
     if args.optimizer == 'Adam':
         optimizer = torch.optim.Adam(
-            detector.parameters(),
+            filter(lambda p: p.requires_grad, detector.parameters()),
             lr=args.learning_rate,
             betas=(0.9, 0.999),
             eps=1e-08,
             weight_decay=args.decay_rate
         )
     else:
-        optimizer = torch.optim.SGD(detector.parameters(), lr=args.learning_rate, momentum=0.9)
+        optimizer = torch.optim.SGD(
+            filter(lambda p: p.requires_grad, detector.parameters()),
+            lr=args.learning_rate,
+            momentum=0.9
+        )
 
     try:
         checkpoint = torch.load(str(experiment_dir) + '/checkpoints/best_model.pth')
@@ -201,7 +205,7 @@ def main(args):
 
         for i, (images, targets) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
             optimizer.zero_grad()
-            torch.autograd.set_detect_anomaly = True
+            #torch.autograd.set_detect_anomaly = True
             images, targets = images.float().cuda(), targets.float().cuda()
 
             _, seq_midpred = detector(images)
