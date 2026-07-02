@@ -69,6 +69,9 @@ def parse_args():
     parser.add_argument('--threshold_eval', type=float, default=0.5, help='Threshold in evaluation [default: 0.5]')
     parser.add_argument('--use_swanlab', type=int, default=1, choices=[0, 1], help='Use SwanLab logging [default: 1]')
     parser.add_argument('--swanlab_project', type=str, default='DeepPro', help='SwanLab project name')
+    parser.add_argument("--spatial_ckpt", type=str, default="")
+    parser.add_argument("--st_ckpt", type=str, default="")
+    parser.add_argument("--freeze_pretrained", type=int, default=1)
 
     return parser.parse_args()
 
@@ -149,7 +152,17 @@ def main(args):
     MODEL = importlib.import_module(args.model)
     shutil.copy('networks/models/%s.py' % args.model, str(experiment_dir))
 
-    detector = MODEL.detector(NUM_CLASSES, SEQ_LEN, SEQ_LEN)
+    if "TDCSTA" in args.model:
+        detector = MODEL.detector(
+            NUM_CLASSES,
+            SEQ_LEN,
+            SEQ_LEN,
+            spatial_ckpt=args.spatial_ckpt,
+            st_ckpt=args.st_ckpt,
+            freeze_pretrained=bool(args.freeze_pretrained),
+        )
+    else:
+        detector = MODEL.detector(NUM_CLASSES, SEQ_LEN, SEQ_LEN)
     if args.gpu_num > 1:
         detector = torch.nn.DataParallel(detector)#, device_ids=list(np.arange(args.gpu_num)))
     detector = detector.cuda()

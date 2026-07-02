@@ -1,0 +1,153 @@
+import argparse
+import os
+import sys
+import importlib
+from pathlib import Path
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+from tqdm import tqdm
+
+from data_utils.TrainDataLoader import TrainIRSeqDataLoader
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(BASE_DIR, "networks/models"))
+
+
+class SoftIoULoss(nn.Module):
+    def forward(self, pred, target):
+        pred = torch.sigmoid(pred)
+        intersection = pred * target
+        intersection_sum = torch.sum(intersection, dim=tuple(range(1, pred.ndim)))
+        pred_sum = torch.sum(pred, dim=tuple(range(1, pred.ndim)))
+        target_sum = torch.sum(target, dim=tuple(range(1, target.ndim)))
+        iou = intersection_sum / (pred_sum + target_sum - intersection_sum + 1e-6)
+        return 1 - torch.mean(iou)
+
+
+class SpatialBranchPretrainNet(nn.Module):
+    def __init__(self, branch, dim=32):
+        super().__init__()
+        self.branch = branch
+        self.head = nn.Conv2d(dim, 1, kernel_size=1)
+
+    def forward(self, images):
+        # images: [B, 1, T, H, W]
+        x = images[:, :, -1, :, :]
+        feat = self.branch(x)
+        pred = self.head(feat).squeeze(1)
+        return pred
+
+
+class STBranchPretrainNet(nn.Module):
+    def __init__(self, branch, dim=32):
+        super().__init__()
+        self.branch = branch
+        self.head = nn.Conv3d(dim, 1, kernel_size=1)
+
+    def forward(self, images):
+        # images: [B, 1, T, H, W]
+        feat = self.branch(images)
+        pred = self.head(feat).squeeze(1)
+        return pred
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--stage", choices=["2d", "3d"], required=True)
+    parser.add_argument("--model", type=str, default="DeepPro-Plus_TDCSTA")
+    parser.add_argument("--dataset", type=str, required=True)
+    parser.add_argument("--datapath", type=str, required=True)
+    parser.add_argument("--save_dir", type=str, default="./pretrained_tdcsta")
+    parser.add_argument("--gpu", type=str, default="0")
+    parser.add_argument("--seqlen", type=int, default=40)
+    parser.add_argument("--sample_rate", type=float, default=0.04)
+    parser.add_argument("--patch_size", type=int, default=128)
+    parser.add_argument("--batch_size", type=int, default=4)
+    parser.add_argument("--epoch", type=int, default=20)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--num_workers", type=int, default=4)
+    return parser.parse_args()
+
+
+def main(args):
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+    save_dir = Path(args.save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    dataset = TrainIRSeqDataLoader(
+        args.dataset,
+        data_root=args.datapath,
+        seq_len=args.seqlen,
+        sample_rate=args.sample_rate,
+        patch_size=args.patch_size,
+        transform=None,
+    )
+
+    loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        drop_last=True,
+        worker_init_fn=lambda x: np.random.seed(x),
+    )
+
+    MODEL = importlib.import_module(args.model)
+    front = MODEL.TDCSTAFront(dim=32)
+
+    if args.stage == "2d":
+        net = SpatialBranchPretrainNet(front.spatial_branch, dim=32)
+        save_path = save_dir / "spatial_branch.pth"
+    else:
+        net = STBranchPretrainNet(front.st_branch, dim=32)
+        save_path = save_dir / "st_branch.pth"
+
+    net = net.cuda()
+    criterion = SoftIoULoss().cuda()
+    optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=1e-4)
+
+    for epoch in range(args.epoch):
+        net.train()
+        loss_sum = 0.0
+
+        for images, targets in tqdm(loader, desc=f"{args.stage} epoch {epoch + 1}/{args.epoch}"):
+            images = images.float().cuda()
+            targets = targets.float().cuda()
+
+            optimizer.zero_grad()
+            pred = net(images)
+
+            if args.stage == "2d":
+                target = targets[:, -1, :, :]
+            else:
+                target = targets
+
+            if pred.shape[-2:] != target.shape[-2:]:
+                if pred.ndim == 3:
+                    pred = F.interpolate(pred.unsqueeze(1), size=target.shape[-2:], mode="bilinear", align_corners=True).squeeze(1)
+                else:
+                    b, t, h, w = pred.shape
+                    pred = F.interpolate(
+                        pred.reshape(b * t, 1, h, w),
+                        size=target.shape[-2:],
+                        mode="bilinear",
+                        align_corners=True,
+                    ).reshape(b, t, target.shape[-2], target.shape[-1])
+
+            loss = criterion(pred, target)
+            loss.backward()
+            optimizer.step()
+            loss_sum += loss.item()
+
+        print(f"Epoch {epoch + 1}: loss={loss_sum / len(loader):.6f}")
+
+    torch.save(net.branch.state_dict(), save_path)
+    print(f"Saved pretrained branch to {save_path}")
+
+
+if __name__ == "__main__":
+    main(parse_args())

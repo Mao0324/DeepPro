@@ -43,24 +43,57 @@ class TDCSTAFront(nn.Module):
         self.k_sa = SelfAttention(dim, window_size=(2, 8, 8), num_heads=4, use_shift=True, mlp_ratio=1.5)
         self.v_sa = SelfAttention(dim, window_size=(2, 8, 8), num_heads=4, use_shift=True, mlp_ratio=1.5)
         self.ca = CrossAttention(dim, window_size=(2, 8, 8), num_heads=4)
-    
-    def freeze_pretrained_backbones(self): #冻结函数冻结 K/V 两个分支，只训练 TDC 分支 + TDCSTA + 后面的 TPro/输出头。
-        for module in [self.st_branch, self.spatial_branch]:
-            module.eval()
-            for p in module.parameters():
+
+        self.freeze_st = False
+        self.freeze_spatial = False 
+
+    def load_pretrained_branches(self, spatial_ckpt=None, st_ckpt=None):
+        if spatial_ckpt is not None and spatial_ckpt != "":
+            state = torch.load(spatial_ckpt, map_location="cpu")
+            self.spatial_branch.load_state_dict(state, strict=True)
+            print(f"Loaded spatial_branch from {spatial_ckpt}")
+
+        if st_ckpt is not None and st_ckpt != "":
+            state = torch.load(st_ckpt, map_location="cpu")
+            self.st_branch.load_state_dict(state, strict=True)
+            print(f"Loaded st_branch from {st_ckpt}")
+
+
+    def freeze_pretrained_backbones(self, freeze_spatial=True, freeze_st=True):
+        self.freeze_spatial = freeze_spatial
+        self.freeze_st = freeze_st
+
+        if freeze_st:
+            self.st_branch.eval()
+            for p in self.st_branch.parameters():
                 p.requires_grad = False
+
+        if freeze_spatial:
+            self.spatial_branch.eval()
+            for p in self.spatial_branch.parameters():
+                p.requires_grad = False
+
 
     def forward(self, seq_imgs):
         q = self.tdc_branch(seq_imgs)
-        
-        self.st_branch.eval()
-        self.spatial_branch.eval()
-        with torch.no_grad():
+
+        if self.freeze_st:
+            self.st_branch.eval()
+            with torch.no_grad():
+                k = self.st_branch(seq_imgs)
+        else:
             k = self.st_branch(seq_imgs)
 
-            current = seq_imgs[:, :, -1, :, :]
+        current = seq_imgs[:, :, -1, :, :]
+
+        if self.freeze_spatial:
+            self.spatial_branch.eval()
+            with torch.no_grad():
+                v = self.spatial_branch(current)
+        else:
             v = self.spatial_branch(current)
-            v = v.unsqueeze(2).expand(-1, -1, q.shape[2], -1, -1)
+
+        v = v.unsqueeze(2).expand(-1, -1, q.shape[2], -1, -1)
 
         q = q.permute(0, 2, 3, 4, 1)
         k = k.permute(0, 2, 3, 4, 1)
@@ -72,18 +105,28 @@ class TDCSTAFront(nn.Module):
 
         out = self.ca(q, k, v)
         out = out.permute(0, 4, 1, 2, 3).contiguous()
-
         return out
 
 class detector(nn.Module):
-    def __init__(self, num_classes, seqlen=100, out_len=100):
+    def __init__(self, num_classes, seqlen=100, out_len=100,
+                 spatial_ckpt=None, st_ckpt=None, freeze_pretrained=True):
         super(detector, self).__init__()
         self.out_len = out_len
         # self.conv_in = nn.Sequential(SDifferenceConv(in_channels=1, out_channels=8, kernel_size=(5,7,7), stride=(1,1,1), padding=(2,3,3)),
         #                              nn.BatchNorm3d(8), nn.ReLU(inplace=True))
         # self.layer1 = nn.Sequential(STD_Resblock(8, 16), STD_Resblock(16, 32))
         self.front = TDCSTAFront(dim=32)
-        self.front.freeze_pretrained_backbones()
+        self.front.load_pretrained_branches(
+            spatial_ckpt=spatial_ckpt,
+            st_ckpt=st_ckpt
+        )
+
+        if freeze_pretrained:
+            self.front.freeze_pretrained_backbones(
+                freeze_spatial=spatial_ckpt is not None and spatial_ckpt != "",
+                freeze_st=st_ckpt is not None and st_ckpt != ""
+            )
+
         self.TPro = TPro(d_model=32, num_head=8, seqlen=seqlen, out_len=out_len)
         self.conv_out1 = nn.Sequential(nn.Conv3d(in_channels=32, out_channels=8, kernel_size=(1,1,1), stride=(1,1,1), padding=(0,0,0)),
                                        nn.BatchNorm3d(8), nn.ReLU(inplace=True))
