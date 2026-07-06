@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 import importlib
+import datetime
 from pathlib import Path
 
 import torch
@@ -69,6 +70,8 @@ def parse_args():
     parser.add_argument("--epoch", type=int, default=20)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--save_name", type=str, default=None)
+    parser.add_argument("--overwrite", type=int, default=0, choices=[0, 1])
     return parser.parse_args()
 
 
@@ -101,14 +104,22 @@ def main(args):
 
     if args.stage == "2d":
         net = SpatialBranchPretrainNet(front.spatial_branch, dim=32)
-        save_path = save_dir / "spatial_branch.pth"
+        default_save_name = "spatial_branch.pth"
     else:
         net = STBranchPretrainNet(front.st_branch, dim=32)
-        save_path = save_dir / "st_branch.pth"
+        default_save_name = "st_branch.pth"
+
+    save_name = args.save_name if args.save_name is not None else default_save_name
+    save_path = save_dir / save_name
+    if save_path.exists() and not args.overwrite:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_path = save_path.with_name(f"{save_path.stem}_{timestamp}{save_path.suffix}")
 
     net = net.cuda()
     criterion = SoftIoULoss().cuda()
     optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=1e-4)
+    best_loss = float("inf")
+    best_epoch = -1
 
     for epoch in range(args.epoch):
         net.train()
@@ -143,10 +154,26 @@ def main(args):
             optimizer.step()
             loss_sum += loss.item()
 
-        print(f"Epoch {epoch + 1}: loss={loss_sum / len(loader):.6f}")
+        avg_loss = loss_sum / len(loader)
+        print(f"Epoch {epoch + 1}: loss={avg_loss:.6f}")
 
-    torch.save(net.branch.state_dict(), save_path)
-    print(f"Saved pretrained branch to {save_path}")
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            best_epoch = epoch
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "stage": args.stage,
+                    "branch_state_dict": net.branch.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "loss": avg_loss,
+                    "args": vars(args),
+                },
+                save_path,
+            )
+            print(f"Saved best pretrained branch to {save_path}")
+
+    print(f"Best epoch: {best_epoch + 1}, best loss: {best_loss:.6f}")
 
 
 if __name__ == "__main__":

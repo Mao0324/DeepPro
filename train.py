@@ -85,7 +85,7 @@ def main(args):
     if args.gpu_num == 1:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
     else:
-        os.environ["CUDA_VISIBLE_DEVICES"] = '0,1,2,3'
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
     '''CREATE DIR'''
     timestr = str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
@@ -185,23 +185,25 @@ def main(args):
             momentum=0.9
         )
 
+    best_iou = 0
     try:
         checkpoint = torch.load(str(experiment_dir) + '/checkpoints/best_model.pth')
         start_epoch = checkpoint['epoch'] + 1
-        try:
+        if hasattr(detector, 'module'):
             detector.module.load_state_dict(checkpoint['model_state_dict'])
-        except:
+        else:
             detector.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        best_iou = checkpoint.get('class_avg_iou', 0)
         log_string('Use pretrain model')
-    except:
-        log_string('No existing model, starting training from scratch...')
+    except Exception as e:
+        log_string('No existing model or failed to load checkpoint: %s' % e)
+        log_string('Starting training from scratch...')
         start_epoch = 0
 
 
     LEARNING_RATE_CLIP = 1e-5
     global_epoch = 0
-    best_iou = 0
     ## train
     for epoch in range(start_epoch, args.epoch):
         '''Train'''

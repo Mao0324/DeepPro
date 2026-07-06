@@ -50,11 +50,19 @@ class TDCSTAFront(nn.Module):
     def load_pretrained_branches(self, spatial_ckpt=None, st_ckpt=None):
         if spatial_ckpt is not None and spatial_ckpt != "":
             state = torch.load(spatial_ckpt, map_location="cpu")
+            if isinstance(state, dict) and "branch_state_dict" in state:
+                if state.get("stage") not in (None, "2d"):
+                    raise ValueError(f"Expected a 2d spatial checkpoint, but got stage={state.get('stage')}")
+                state = state["branch_state_dict"]
             self.spatial_branch.load_state_dict(state, strict=True)
             print(f"Loaded spatial_branch from {spatial_ckpt}")
 
         if st_ckpt is not None and st_ckpt != "":
             state = torch.load(st_ckpt, map_location="cpu")
+            if isinstance(state, dict) and "branch_state_dict" in state:
+                if state.get("stage") not in (None, "3d"):
+                    raise ValueError(f"Expected a 3d spatio-temporal checkpoint, but got stage={state.get('stage')}")
+                state = state["branch_state_dict"]
             self.st_branch.load_state_dict(state, strict=True)
             print(f"Loaded st_branch from {st_ckpt}")
 
