@@ -326,7 +326,26 @@ def main(args):
         loss_sum = 0
         detector.train()
 
-        for i, (images, targets) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
+        # for i, (images, targets) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
+        train_bar = tqdm(
+            enumerate(trainDataLoader),
+            total=len(trainDataLoader),
+            desc='Train %03d/%03d' % (epoch + 1, args.epoch),
+            smoothing=0.9,
+            ascii=True,
+            dynamic_ncols=False,
+            ncols=100,
+            mininterval=0.5,
+            leave=True,
+            file=sys.stdout,
+            bar_format=(
+                '{desc}: {percentage:3.0f}%|{bar:30}| '
+                '{n_fmt}/{total_fmt} '
+                '[{elapsed}<{remaining}, {rate_fmt}]'
+            ),
+        )
+
+        for i, (images, targets) in train_bar:
             optimizer.zero_grad()
             #torch.autograd.set_detect_anomaly = True
             images, targets = images.float().cuda(), targets.float().cuda()
@@ -343,6 +362,11 @@ def main(args):
             total_intersection_mid += np.sum(midpred_choice * batch_label)
             total_union_mid += ((midpred_choice + batch_label)>0).astype(np.float32).sum()
             loss_sum += loss.item()
+            train_bar.set_postfix(
+                loss='%.4f' % loss.item(),
+                lr='%.2e' % optimizer.param_groups[-1]['lr'],
+                refresh=False,
+            )
             # break
         train_loss = loss_sum / num_batches
         train_iou = total_intersection_mid / total_union_mid
@@ -386,7 +410,26 @@ def main(args):
 
             log_string('---- EPOCH %03d EVALUATION ----' % (global_epoch + 1))
             # for i, (images, targets) in tqdm(enumerate(testDataLoader), total=len(testDataLoader), smoothing=0.9):
-            for seq_idx, seq_dataset in tqdm(enumerate(TEST_DATASET), total=len(TEST_DATASET), smoothing=0.9):
+            #for seq_idx, seq_dataset in tqdm(enumerate(TEST_DATASET), total=len(TEST_DATASET), smoothing=0.9):
+            eval_bar = tqdm(
+                enumerate(TEST_DATASET),
+                total=len(TEST_DATASET),
+                desc='Eval  %03d/%03d' % (epoch + 1, args.epoch),
+                smoothing=0.9,
+                ascii=True,
+                dynamic_ncols=False,
+                ncols=100,
+                mininterval=0.5,
+                leave=True,
+                file=sys.stdout,
+                bar_format=(
+                    '{desc}: {percentage:3.0f}%|{bar:30}| '
+                    '{n_fmt}/{total_fmt} '
+                    '[{elapsed}<{remaining}, {rate_fmt}]'
+                ),
+            )
+
+            for seq_idx, seq_dataset in eval_bar:
                 # if seq_idx % 3 > 0:
                 #     continue
                 seq_dataloader = torch.utils.data.DataLoader(seq_dataset, batch_size=1, shuffle=False)

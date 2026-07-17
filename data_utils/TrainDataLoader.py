@@ -62,7 +62,12 @@ class TrainSeqDataLoader(Dataset):
         return image, label
 
     def sample_sequence(self, idx):
-        sample = np.random.choice(self.samplelist, p=self.sample_p)
+        # sample = np.random.choice(self.samplelist, p=self.sample_p)
+        sample_idx = np.random.choice(
+            len(self.samplelist),
+            p=self.sample_p,
+        )
+        sample = self.samplelist[sample_idx]
         # sample = random.choice(self.samplelist, weights=self.sample_p)  ## weights不需要合为1
         for i in range(len(sample)):
             image_path, label_path = sample[i]

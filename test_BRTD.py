@@ -132,7 +132,16 @@ def main(args):
         log_string('---- EVALUATION----')
 
         time_start = time.time()
-        for seq_idx, seq_dataset in tqdm(enumerate(TEST_DATASET), total=len(TEST_DATASET), smoothing=0.9):
+        test_bar = tqdm(
+            enumerate(TEST_DATASET),
+            total=len(TEST_DATASET),
+            desc='Testing',
+            smoothing=0.9,
+            **TQDM_CONFIG
+        )
+
+        for seq_idx, seq_dataset in test_bar:
+        # for seq_idx, seq_dataset in tqdm(enumerate(TEST_DATASET), total=len(TEST_DATASET), smoothing=0.9):
             seq_dataloader = torch.utils.data.DataLoader(seq_dataset, batch_size=BATCH_SIZE, shuffle=False)
             num_batches += len(seq_dataloader)
             seq_midpred_all = []   ## b, t, h, w
