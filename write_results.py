@@ -2,10 +2,58 @@ import numpy as np
 from sklearn.metrics import auc
 
 
+LOW_SNR_SEQUENCE_NAMES = frozenset({
+    'Sequence92',
+    'Sequence47',
+    'Sequence56',
+    'Sequence59',
+    'Sequence76',
+    'Sequence101',
+    'Sequence105',
+    'Sequence119',
+})
+HIGH_SNR_SEQUENCE_NAMES = frozenset({
+    'Sequence85',
+    'Sequence86',
+    'Sequence87',
+    'Sequence88',
+    'Sequence89',
+    'Sequence90',
+    'Sequence91',
+    'Sequence93',
+    'Sequence94',
+    'Sequence95',
+    'Sequence96',
+    'Sequence97',
+})
+
+
+def get_nudt_mirsdt_snr_indices(sequence_names):
+    sequence_names = list(sequence_names)
+    known_names = LOW_SNR_SEQUENCE_NAMES | HIGH_SNR_SEQUENCE_NAMES
+    unknown_names = sorted(set(sequence_names) - known_names)
+    if unknown_names:
+        raise ValueError(
+            'NUDT-MIRSDT SNR group is undefined for: %s'
+            % ', '.join(unknown_names)
+        )
+
+    low_snr = np.array([
+        index for index, name in enumerate(sequence_names)
+        if name in LOW_SNR_SEQUENCE_NAMES
+    ], dtype=np.int64)
+    high_snr = np.array([
+        index for index, name in enumerate(sequence_names)
+        if name in HIGH_SNR_SEQUENCE_NAMES
+    ], dtype=np.int64)
+    if low_snr.size == 0 or high_snr.size == 0:
+        raise ValueError('Both low- and high-SNR sequences are required for grouped metrics.')
+    return low_snr, high_snr
+
+
 def writeNUDTMIRSDT_ROC(FalseNumAll, TrueNumAll, TgtNumAll, pixelsNumber, total_intersection_mid, total_union_mid,
                         Th_Seg, TEST_DATASET, log_string):
-    low_snr = [7,13,14,15,16,17,18,19]
-    high_snr = [0,1,2,3,4,5,6,8,9,10,11,12]
+    low_snr, high_snr = get_nudt_mirsdt_snr_indices(TEST_DATASET.seq_names)
     Pd_L = np.sum(TrueNumAll[low_snr, :], axis=0) / np.sum(TgtNumAll[low_snr, :], axis=0)
     Fa_L = np.sum(FalseNumAll[low_snr, :], axis=0) / pixelsNumber[low_snr].sum()
     auc_L = auc(Fa_L, Pd_L)
@@ -86,6 +134,5 @@ def writeMIRST_ROC(FalseNumAll, TrueNumAll, TgtNumAll, pixelsNumber, total_inter
     log_string('Eval avg class IoU of prediction: %f' % (mIoU_mid))
 
     return
-
 
 

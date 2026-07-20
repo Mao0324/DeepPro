@@ -17,6 +17,8 @@ from tqdm import tqdm
 import numpy as np
 import random
 import torch.nn.functional as F
+import subprocess
+from sequence_utils import SequenceAccumulator, frame_range_length
 
 try:
     import swanlab
@@ -60,10 +62,14 @@ def clean_state_dict(state_dict):
 def parse_args():
     parser = argparse.ArgumentParser('Model')
     parser.add_argument('--model', type=str, default='DeepPro-Plus', help='model name [default: pointnet_sem_seg]')
-    parser.add_argument('--batch_size', type=int, default=4, help='Batch Size during training [default: 16]')
+    parser.add_argument('--batch_size', type=int, default=1,
+                        help='Batch size during training [default: 1]')
     parser.add_argument('--epoch', default=32, type=int, help='Epoch to run [default: 32]')
     parser.add_argument('--learning_rate', default=0.001, type=float, help='Initial learning rate [default: 0.001]')
-    parser.add_argument('--gpu', type=str, default='0', help='GPU to use [default: GPU 0]')
+    parser.add_argument(
+        '--gpu', type=str, default=os.environ.get('CUDA_VISIBLE_DEVICES', '0'),
+        help='visible GPU device(s); defaults to the existing CUDA_VISIBLE_DEVICES value',
+    )
     parser.add_argument('--gpu_num', type=int, default=1, help='GPU to use')
     parser.add_argument('--optimizer', type=str, default='Adam', help='Adam or SGD [default: Adam]')
     parser.add_argument('--datapath', type=str, default='./datasets/NUDT-MIRSDT')
@@ -89,6 +95,10 @@ def parse_args():
     parser.add_argument('--brtd_use_gate', type=int, default=1, choices=[0, 1])
     parser.add_argument('--brtd_zero_init', type=int, default=1, choices=[0, 1])
     parser.add_argument('--run_test_after_train', type=int, default=1, choices=[0, 1])
+    parser.add_argument('--amp', type=int, default=0, choices=[0, 1],
+                        help='Use CUDA automatic mixed precision [default: 0]')
+    parser.add_argument('--accumulation_steps', type=int, default=1,
+                        help='Accumulate gradients across this many batches [default: 1]')
     parser.add_argument("--spatial_ckpt", type=str, default="")
     parser.add_argument("--st_ckpt", type=str, default="")
     parser.add_argument("--freeze_pretrained", type=int, default=1)
@@ -102,10 +112,9 @@ def main(args):
         print(str)
 
     '''HYPER PARAMETER'''
-    if args.gpu_num == 1:
-        os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
-    else:
-        os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+    if args.accumulation_steps < 1:
+        raise ValueError('--accumulation_steps must be at least 1.')
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
     seed_everything(args.seed)
 
     '''CREATE DIR'''
@@ -292,6 +301,7 @@ def main(args):
             parameter_groups,
             momentum=0.9
         )
+    scaler = torch.cuda.amp.GradScaler(enabled=bool(args.amp))
 
     best_iou = 0
     try:
@@ -302,6 +312,8 @@ def main(args):
         else:
             detector.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        if checkpoint.get('scaler_state_dict'):
+            scaler.load_state_dict(checkpoint['scaler_state_dict'])
         best_iou = checkpoint.get('class_avg_iou', 0)
         log_string('Use pretrain model')
     except Exception as e:
@@ -325,6 +337,7 @@ def main(args):
         total_union_mid = 0
         loss_sum = 0
         detector.train()
+        optimizer.zero_grad(set_to_none=True)
 
         # for i, (images, targets) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
         train_bar = tqdm(
@@ -346,17 +359,29 @@ def main(args):
         )
 
         for i, (images, targets) in train_bar:
-            optimizer.zero_grad()
             #torch.autograd.set_detect_anomaly = True
             images, targets = images.float().cuda(), targets.float().cuda()
 
-            _, seq_midpred = detector(images)
+            with torch.cuda.amp.autocast(enabled=bool(args.amp)):
+                _, seq_midpred = detector(images)
+                loss = criterion(seq_midpred, targets)
 
-            loss = criterion(seq_midpred, targets)
-            loss.backward()
-            optimizer.step()
+            group_start = (i // args.accumulation_steps) * args.accumulation_steps
+            group_size = min(
+                args.accumulation_steps,
+                num_batches - group_start,
+            )
+            scaler.scale(loss / group_size).backward()
+            should_step = (
+                (i + 1) % args.accumulation_steps == 0
+                or i + 1 == num_batches
+            )
+            if should_step:
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad(set_to_none=True)
 
-            seq_midpred = torch.sigmoid(seq_midpred)
+            seq_midpred = torch.sigmoid(seq_midpred.detach())
             midpred_choice = (seq_midpred.cpu().data.numpy() > args.threshold_eval) * 1.
             batch_label    = targets.cpu().data.numpy()
             total_intersection_mid += np.sum(midpred_choice * batch_label)
@@ -386,15 +411,19 @@ def main(args):
             if args.gpu_num > 1:
                 state = {
                     'epoch': epoch,
+                    'model_name': args.model,
                     'model_state_dict': detector.module.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
+                    'scaler_state_dict': scaler.state_dict(),
                     'model_config': checkpoint_model_config,
                 }
             else:
                 state = {
                     'epoch': epoch,
+                    'model_name': args.model,
                     'model_state_dict': detector.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
+                    'scaler_state_dict': scaler.state_dict(),
                     'model_config': checkpoint_model_config,
                 }
             torch.save(state, savepath)
@@ -434,20 +463,39 @@ def main(args):
                 #     continue
                 seq_dataloader = torch.utils.data.DataLoader(seq_dataset, batch_size=1, shuffle=False)
                 num_batches += len(seq_dataloader)
+                accumulator = SequenceAccumulator()
                 for i, (images, targets, _, first_end) in enumerate(seq_dataloader):
                     images, targets = images.float().cuda(), targets.float().cuda()
 
-                    _, seq_midpred = detector(images)
-                    if seq_midpred.shape[-1] != targets.shape[-1]:
-                        seq_midpred = F.interpolate(seq_midpred, size=targets.shape[-2:])
+                    with torch.cuda.amp.autocast(enabled=bool(args.amp)):
+                        _, seq_midpred = detector(images)
+                        if seq_midpred.shape[-2:] != targets.shape[-2:]:
+                            seq_midpred = F.interpolate(
+                                seq_midpred,
+                                size=targets.shape[-2:],
+                            )
+                        valid_length = frame_range_length(first_end)
+                        eval_loss_window = criterion(
+                            seq_midpred[:, :valid_length],
+                            targets[:, :valid_length],
+                        )
 
-                    loss_g_sum += criterion(seq_midpred, targets).item()
+                    loss_g_sum += eval_loss_window.item()
 
-                    seq_midpred = torch.sigmoid(seq_midpred)
-                    pred_choice_mid = (seq_midpred.cpu().data.numpy() > args.threshold_eval) * 1.
-                    batch_label     = targets.cpu().data.numpy()
-                    total_intersection_mid += np.sum(pred_choice_mid * batch_label)
-                    total_union_mid += ((pred_choice_mid + batch_label) > 0).astype(np.float32).sum()
+                    accumulator.add(
+                        torch.sigmoid(seq_midpred).cpu(),
+                        targets.cpu(),
+                        first_end,
+                    )
+
+                pred_choice_mid = (
+                    accumulator.predictions.numpy() > args.threshold_eval
+                ) * 1.
+                batch_label = accumulator.targets.numpy()
+                total_intersection_mid += np.sum(pred_choice_mid * batch_label)
+                total_union_mid += (
+                    (pred_choice_mid + batch_label) > 0
+                ).astype(np.float32).sum()
 
             mIoU_mid = total_intersection_mid / total_union_mid
             eval_loss = loss_g_sum / float(num_batches)
@@ -462,17 +510,21 @@ def main(args):
                 if args.gpu_num > 1:
                     state = {
                         'epoch': epoch,
+                        'model_name': args.model,
                         'class_avg_iou': mIoU_mid,
                         'model_state_dict': detector.module.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
+                        'scaler_state_dict': scaler.state_dict(),
                         'model_config': checkpoint_model_config,
                     }
                 else:
                     state = {
                         'epoch': epoch,
+                        'model_name': args.model,
                         'class_avg_iou': mIoU_mid,
                         'model_state_dict': detector.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
+                        'scaler_state_dict': scaler.state_dict(),
                         'model_config': checkpoint_model_config,
                     }
                 torch.save(state, savepath)
@@ -491,15 +543,23 @@ def main(args):
         swanlab.finish()
 
 
-def path_remake(path):
-    return path.replace(' ', r'\ ').replace('(', r'\(').replace(')', r'\)').replace('&', r'\&')
-
-
 if __name__ == '__main__':
     args = parse_args()
     main(args)
 
     if args.run_test_after_train:
-        os.system('python test.py --gpu %s --seqlen %d --datapath %s --dataset %s --log_dir %s' % (
-                args.gpu, args.seqlen, path_remake(args.datapath), path_remake(args.dataset), path_remake(args.log_dir)))
+        subprocess.run(
+            [
+                sys.executable,
+                os.path.join(BASE_DIR, 'test_BRTD.py'),
+                '--gpu', args.gpu,
+                '--seqlen', str(args.seqlen),
+                '--datapath', args.datapath,
+                '--dataset', args.dataset,
+                '--log_dir', args.log_dir,
+                '--logpath', args.savepath,
+                '--amp', str(args.amp),
+            ],
+            check=True,
+        )
 

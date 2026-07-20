@@ -1,0 +1,9 @@
+2026-07-20 14:41:21,018 - Model - INFO - PARAMETER ...
+2026-07-20 14:41:21,019 - Model - INFO - Namespace(accumulation_steps=1, amp=1, base_ckpt='', base_lr_mult=1.0, batch_size=4, brtd_adaptive_tdc=1, brtd_use_background=1, brtd_use_gate=1, brtd_zero_init=1, datapath='/home/user/4T_Storage/SJY/CSIG2026/datasets/NUDT-MIRSDT-Noise8.0_FJY', dataset='NUDT-MIRSDT-HiNo', decay_rate=0.0001, epoch=32, freeze_pretrained=1, gpu='1', gpu_num=1, learning_rate=0.001, log_dir='NUDT-MIRSDT-HiNo__2026-07-20_14-41__SoftLoUloss_DeepPro-Plus_BRTD_DataL40', lr_decay=0.7, model='DeepPro-Plus_BRTD', optimizer='Adam', patch_size=128, run_test_after_train=1, sample_rate=0.1, savepath='./log/', seed=46, seqlen=40, spatial_ckpt='', st_ckpt='', step_size=10, swanlab_project='DeepPro', threshold_eval=0.5, use_swanlab=1)
+2026-07-20 14:41:36,042 - Model - INFO - SwanLab init failed: HTTPSConnectionPool(host='api.swanlab.cn', port=443): Max retries exceeded with url: /api/login/api_key (Caused by ProxyError('Cannot connect to proxy.', NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f4b554a5c70>: Failed to establish a new connection: [Errno 111] Connection refused'))). Skip SwanLab logging.
+2026-07-20 14:41:37,045 - Model - INFO - The number of training data is: 776
+2026-07-20 14:41:37,045 - Model - INFO - The number of test data is: 20 sequences
+2026-07-20 14:41:37,691 - Model - INFO - No existing model or failed to load checkpoint: [Errno 2] No such file or directory: 'log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-20_14-41__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/best_model.pth'
+2026-07-20 14:41:37,691 - Model - INFO - Starting training from scratch...
+2026-07-20 14:41:37,691 - Model - INFO - **** Epoch 1 (1/32) ****
+2026-07-20 14:41:37,691 - Model - INFO - Learning rate:0.001000

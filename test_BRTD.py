@@ -17,10 +17,11 @@ import time
 from PIL import Image
 import cv2
 import scipy.io as scio
-from ShootingRules import ShootingRules
+import torch.nn.functional as F
+from ShootingRules_v2 import ShootingRules
 from sklearn.metrics import auc
 from collections import OrderedDict
-from thop import profile, clever_format
+from sequence_utils import SequenceAccumulator
 # from attribution.core import IR_Integrated_gradient, MeanLinearPath, ZeroLinearPath
 from write_results import writeNUDTMIRSDT_ROC, writeMIRST_ROC
 
@@ -34,7 +35,10 @@ def parse_args():
     parser = argparse.ArgumentParser('Model')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size in testing [default: 32]')
     parser.add_argument('--epoch', type=int, default=None, help='Epoch of generator to test [default: None]')
-    parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
+    parser.add_argument(
+        '--gpu', type=str, default=os.environ.get('CUDA_VISIBLE_DEVICES', '0'),
+        help='visible GPU device(s); defaults to the existing CUDA_VISIBLE_DEVICES value',
+    )
     parser.add_argument('--seqlen', type=int, default=40, help='Frame number as an input [default: 100]')
     parser.add_argument('--datapath', type=str, default='./datasets/NUDT-MIRSDT', help='Data path')
     parser.add_argument('--dataset', type=str, default='NUDT-MIRSDT', help='dataset name [default: NUDT-MIRSDT, IRDST-simulation, RGB-T, SatVideoIRSDT]')
@@ -43,6 +47,10 @@ def parse_args():
     parser.add_argument('--visual', action='store_true', default=False, help='visualize result [default: False]')
     parser.add_argument('--threshold_eval', type=float, default=0.5, help='Threshold in evaluation [default: 0.5]')
     parser.add_argument('--attribution', action='store_true', default=False, help='This test is attribution analysis or not')
+    parser.add_argument('--profile_model', type=int, default=0, choices=[0, 1],
+                        help='Run optional THOP profiling after evaluation [default: 0]')
+    parser.add_argument('--amp', type=int, default=0, choices=[0, 1],
+                        help='Use CUDA automatic mixed precision [default: 0]')
     return parser.parse_args()
 
 
@@ -58,20 +66,26 @@ def main(args):
 
     '''HYPER PARAMETER'''
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
-    experiment_dir = args.logpath + 'sem_seg/' + args.log_dir
+    if args.batch_size != 1:
+        raise ValueError('test_BRTD.py only supports --batch_size 1.')
+    if args.attribution:
+        raise NotImplementedError(
+            '--attribution is unavailable because its implementation is commented out.'
+        )
+
+    experiment_dir = Path(args.logpath) / 'sem_seg' / args.log_dir
     if args.visual:
-        visual_dir = experiment_dir + '/visual/'
-        visual_dir = Path(visual_dir)
-        visual_dir.mkdir(exist_ok=True)
+        visual_dir = experiment_dir / 'visual'
+        visual_dir.mkdir(exist_ok=True, parents=True)
 
     '''LOG'''
     logger = logging.getLogger("Model")
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     if args.epoch is None:
-        file_handler = logging.FileHandler('%s/eval.txt' % experiment_dir)
+        file_handler = logging.FileHandler(experiment_dir / 'eval.txt')
     else:
-        file_handler = logging.FileHandler('%s/eval_epoch-%d.txt' % (experiment_dir, args.epoch))
+        file_handler = logging.FileHandler(experiment_dir / ('eval_epoch-%d.txt' % args.epoch))
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
@@ -88,13 +102,21 @@ def main(args):
     TEST_DATASET  = TestIRSeqDataLoader(args.dataset, data_root=root,  seq_len=SEQ_LEN, cat_len=int(SEQ_LEN*0.1), transform=None)
 
     '''MODEL LOADING'''
-    model_name = os.listdir(experiment_dir + '/logs')[0].split('.')[0]
-    sys.path.append(experiment_dir)
-    MODEL = importlib.import_module(model_name)
     if args.epoch is None:
-        checkpoint = torch.load(str(experiment_dir) + '/checkpoints/best_model.pth')
+        checkpoint_path = experiment_dir / 'checkpoints' / 'best_model.pth'
     else:
-        checkpoint = torch.load(str(experiment_dir) + '/checkpoints/epoch_%d_model.pth' % args.epoch)
+        checkpoint_path = experiment_dir / 'checkpoints' / ('epoch_%d_model.pth' % args.epoch)
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    model_name = checkpoint.get('model_name')
+    if model_name is None:
+        log_files = sorted((experiment_dir / 'logs').glob('*.txt'))
+        if len(log_files) != 1:
+            raise RuntimeError(
+                'Checkpoint has no model_name and exactly one model log could not be identified.'
+            )
+        model_name = log_files[0].stem
+    sys.path.append(str(experiment_dir))
+    MODEL = importlib.import_module(model_name)
     model_config = checkpoint.get('model_config', {})
     detector = MODEL.detector(
         NUM_CLASSES,
@@ -109,7 +131,11 @@ def main(args):
     #     new_state_dict[name] = v
     # detector.load_state_dict(new_state_dict)   ## or use the above detector definition
     # ## ##########################################
-    detector.load_state_dict(checkpoint['model_state_dict'])
+    state_dict = {
+        key[7:] if key.startswith('module.') else key: value
+        for key, value in checkpoint['model_state_dict'].items()
+    }
+    detector.load_state_dict(state_dict)
     detector.eval()
     eval = ShootingRules()
 
@@ -132,20 +158,34 @@ def main(args):
         log_string('---- EVALUATION----')
 
         time_start = time.time()
-        test_bar = tqdm(
+        if args.epoch is None:
+            eval_desc = 'Test best_model'
+        else:
+            eval_desc = 'Test epoch_%03d' % args.epoch
+
+        eval_bar = tqdm(
             enumerate(TEST_DATASET),
             total=len(TEST_DATASET),
-            desc='Testing',
+            desc=eval_desc,
             smoothing=0.9,
-            **TQDM_CONFIG
+            ascii=True,
+            dynamic_ncols=False,
+            ncols=100,
+            mininterval=0.5,
+            leave=True,
+            file=sys.stdout,
+            bar_format=(
+                '{desc}: {percentage:3.0f}%|{bar:30}| '
+                '{n_fmt}/{total_fmt} '
+                '[{elapsed}<{remaining}, {rate_fmt}]'
+            ),
         )
 
-        for seq_idx, seq_dataset in test_bar:
+        for seq_idx, seq_dataset in eval_bar:
         # for seq_idx, seq_dataset in tqdm(enumerate(TEST_DATASET), total=len(TEST_DATASET), smoothing=0.9):
             seq_dataloader = torch.utils.data.DataLoader(seq_dataset, batch_size=BATCH_SIZE, shuffle=False)
             num_batches += len(seq_dataloader)
-            seq_midpred_all = []   ## b, t, h, w
-            targets_all     = []
+            accumulator = SequenceAccumulator()
             for i, (images, targets, centroids, first_end) in enumerate(seq_dataloader):
                 images, targets = images.float().cuda(), targets.float().cuda()
                 first_frame, end_frame = first_end
@@ -157,25 +197,21 @@ def main(args):
                     # seq_midpred = IR_Integrated_gradient(images, targets, (paths, args.dataset, savepath), detector, path_interpolation_func)
 
                 else:
-                    _, seq_midpred = detector(images)   ## b, t, h, w
-                    seq_midpred = torch.sigmoid(seq_midpred).data.cpu()
-                    targets = targets.data.cpu()
-
-                    if i == 0:
-                        seq_midpred_all = seq_midpred
-                        targets_all     = targets
-                        centroids_all   = centroids
-                    else:
-                        seq_midpred_all[:, first_frame:last_end+1, :, :] = torch.maximum(seq_midpred_all[:, first_frame:, :, :],
-                                                                                         seq_midpred[:, :last_end-first_frame+1, :, :])
-                        seq_midpred_all = torch.cat([seq_midpred_all, seq_midpred[:, last_end-first_frame+1:, :, :]], dim=1)
-                        targets_all     = torch.cat([targets_all, targets[:, last_end-first_frame+1:, :, :]], dim=1)
-                        centroids_all   = torch.cat([centroids_all, centroids[:, last_end-first_frame+1:, :, :]], dim=1)
-
-                    last_first = first_frame
-                    last_end = end_frame
+                    with torch.cuda.amp.autocast(enabled=bool(args.amp)):
+                        _, seq_midpred = detector(images)   ## b, t, h, w
+                    if seq_midpred.shape[-2:] != targets.shape[-2:]:
+                        seq_midpred = F.interpolate(seq_midpred, size=targets.shape[-2:])
+                    accumulator.add(
+                        torch.sigmoid(seq_midpred).cpu(),
+                        targets.cpu(),
+                        first_end,
+                        centroids,
+                    )
 
             if not args.attribution:
+                seq_midpred_all = accumulator.predictions
+                targets_all = accumulator.targets
+                centroids_all = accumulator.centroids
                 ############### for IoU ###############
                 pred_choice_mid = (seq_midpred_all.numpy() > args.threshold_eval) * 1.
                 batch_label     = targets_all.numpy()
@@ -188,7 +224,7 @@ def main(args):
                 for ti in range(t):
                     midpred_ti = seq_midpred_all[:, ti, :, :].numpy().copy()
                     centroid_ti  = centroids_all[:, ti, :, :].numpy().copy()
-                    if midpred_ti.shape[-1] != centroid_ti.shape[-1]:
+                    if midpred_ti.shape[-2:] != centroid_ti.shape[-2:]:
                         h, w = centroid_ti.shape[-2:]
                         midpred_ti = cv2.resize(midpred_ti[0, :, :], (w, h))[None, :, :]
                     for th_i in range(len(Th_Seg)):
@@ -218,9 +254,16 @@ def main(args):
                 writeMIRST_ROC(FalseNumAll, TrueNumAll, TgtNumAll, pixelsNumber, total_intersection_mid,
                                total_union_mid, Th_Seg, TEST_DATASET, log_string)
 
-        flops, params = profile(detector, inputs=(torch.randn(1, 1, args.seqlen, 200, 300).cuda(),))
-        flops, params = clever_format([flops, params], '%.3f')
-        print('FLOPS for %d frames: ' % SEQ_LEN, flops)
+        if args.profile_model:
+            from thop import clever_format, profile
+
+            profile_input = torch.randn(
+                1, 1, args.seqlen, 200, 300,
+                device=next(detector.parameters()).device,
+            )
+            flops, params = profile(detector, inputs=(profile_input,))
+            flops, params = clever_format([flops, params], '%.3f')
+            print('FLOPS for %d frames: ' % SEQ_LEN, flops)
         print('Params:', count_parameters(detector))
 
         print("Done!")

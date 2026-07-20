@@ -31,11 +31,14 @@ class TPro(nn.Module):
         value = input / (self.seqlen**0.5)
         value = value.view(bs, h, w, self.num_head, self.hidden_dim, slen)
 
-        qkv = torch.zeros([bs, h, w, self.num_head, self.hidden_dim, self.out_len]).to(input.device)
+        qkv = input.new_empty(bs, d, self.out_len, h, w)
         for i in range(self.num_head):
-            qkv[:,:,:,i,:,:] = self.QK_heads[i](value[:,:,:,i,:,:])
+            head_start = i * self.hidden_dim
+            head_end = head_start + self.hidden_dim
+            qkv[:, head_start:head_end] = self.QK_heads[i](
+                value[:, :, :, i]
+            ).permute(0, 3, 4, 1, 2)
 
-        qkv = qkv.view(bs, h, w, -1, self.out_len).permute(0, 3, 4, 1, 2)
         qkv = self.relu(self.norm1(qkv))
         x = self.conv(qkv)
         return x

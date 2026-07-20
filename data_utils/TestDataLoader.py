@@ -5,6 +5,7 @@ from PIL import Image
 import math
 import random
 from torch.utils.data import Dataset
+from data_utils.loader_utils import validate_frame_pairs
 
 
 class TestSeqDataLoader(Dataset):
@@ -33,7 +34,7 @@ class TestSeqDataLoader(Dataset):
     def __len__(self):
         return len(self.samplelist)
 
-    def get_image_label(self, image_path, label_path):
+    def get_image_label(self, image_path, label_path, centroid_path=None):
         image = Image.open(image_path)
         if self.dataset == 'IRSatVideo-LEO':
             image = image.resize([512, 512])
@@ -43,15 +44,15 @@ class TestSeqDataLoader(Dataset):
         image = np.expand_dims(np.expand_dims(image, axis=0), axis=0)
 
         label = Image.open(label_path)
-        label = np.array(label, dtype=np.uint8) / 255.
+        label = np.array(label, dtype=np.float32) / 255.
         if label.ndim == 3:
             label = label[:,:,0]
         label[label > 0] = 1.
         label = np.expand_dims(label, axis=0)
 
         if 'NUDT-MIRSDT' in self.dataset:
-            centroid = Image.open(label_path.replace('masks', 'masks_centroid'))
-            centroid = np.array(centroid, dtype=np.uint8) / 255.
+            centroid = Image.open(centroid_path)
+            centroid = np.array(centroid, dtype=np.float32) / 255.
             centroid = np.expand_dims(centroid, axis=0)
         else:
             centroid = label
@@ -60,9 +61,15 @@ class TestSeqDataLoader(Dataset):
 
     def sample_sequence(self, idx):
         sample = self.samplelist[idx]   ## frame：各帧在序列中的顺序（0开始）
+        first_frame = sample[0][2]
+        end_frame = sample[-1][2]
         for i in range(len(sample)):
-            image_path, label_path, frame = sample[i]
-            image, label, centroid = self.get_image_label(image_path, label_path)
+            image_path, label_path, frame, centroid_path = sample[i]
+            image, label, centroid = self.get_image_label(
+                image_path,
+                label_path,
+                centroid_path,
+            )
             if i == 0:
                 images = image
                 labels = label
@@ -72,17 +79,19 @@ class TestSeqDataLoader(Dataset):
                 labels = np.concatenate((labels, label), axis=0)            ## [t, h, w]
                 centroids = np.concatenate((centroids, centroid), axis=0)   ## [t, h, w]
 
-            if i == 0:
-                first_frame = frame
-            elif i == len(sample) - 1:
-                end_frame = frame
-
         images = (images - self.train_mean) / self.train_std
-        # t, h, w = labels.shape
-        # if t < self.seq_len:
-        #     images = np.concatenate((images, np.zeros([1, self.seq_len-t, h, w])), axis=1)
-        #     labels = np.concatenate((labels, np.zeros([self.seq_len-t, h, w])), axis=0)
-        #     centroids = np.concatenate((centroids, np.zeros([self.seq_len-t, h, w])), axis=0)
+        t, h, w = labels.shape
+        if t < self.seq_len:
+            padding = self.seq_len - t
+            images = np.concatenate((images, np.zeros(
+                [1, padding, h, w], dtype=images.dtype
+            )), axis=1)
+            labels = np.concatenate((labels, np.zeros(
+                [padding, h, w], dtype=labels.dtype
+            )), axis=0)
+            centroids = np.concatenate((centroids, np.zeros(
+                [padding, h, w], dtype=centroids.dtype
+            )), axis=0)
 
         # if self.transform is not None:
         #     sample = self.transform(sample)   #########################
@@ -104,6 +113,10 @@ class TestSeqDataLoader(Dataset):
 
 class TestIRSeqDataLoader(object):
     def __init__(self, dataset='NUDT-MIRSDT', data_root='./datasets/IRSeq', seq_len=100, cat_len=10, transform=None):
+        if seq_len <= 0:
+            raise ValueError('seq_len must be positive.')
+        if cat_len < 0 or cat_len >= seq_len:
+            raise ValueError('cat_len must satisfy 0 <= cat_len < seq_len.')
         self.dataset = dataset
         self.data_root = data_root
         self.seq_len = seq_len
@@ -132,6 +145,23 @@ class TestIRSeqDataLoader(object):
             label_root = os.path.join(self.data_root, seq_name, 'masks').replace('NUDT-MIRSDT-Noise/'+self.dataset, 'NUDT-MIRSDT')
             images = np.sort(os.listdir(image_root))
             labels = np.sort(os.listdir(label_root))
+            centroid_root = os.path.join(
+                self.data_root,
+                seq_name,
+                'masks_centroid',
+            )
+            if not os.path.isdir(centroid_root):
+                centroid_root = os.path.join(
+                    os.path.dirname(self.data_root),
+                    'NUDT-MIRSDT',
+                    seq_name,
+                    'masks_centroid',
+                )
+            if not os.path.isdir(centroid_root):
+                raise FileNotFoundError(
+                    'Centroid directory does not exist for %s.' % seq_name
+                )
+            centroid_files = np.sort(os.listdir(centroid_root))
         elif 'RGB-T' in self.dataset:
             image_root = os.path.join(self.data_root, 'test2017', seq_name, '01')
             label_root = os.path.join(self.data_root, 'segmentations', seq_name)
@@ -150,12 +180,39 @@ class TestIRSeqDataLoader(object):
             images = np.sort(os.listdir(image_root))
             labels = np.sort(os.listdir(label_root))
 
+        validate_frame_pairs(
+            image_root,
+            label_root,
+            images,
+            labels,
+            seq_name,
+        )
+        if 'NUDT-MIRSDT' in self.dataset:
+            validate_frame_pairs(
+                label_root,
+                centroid_root,
+                labels,
+                centroid_files,
+                '%s centroid masks' % seq_name,
+            )
 
         samplelist = []
-        num_sample = math.ceil((len(images)-self.cat_len) / (self.seq_len-self.cat_len))
+        num_sample = max(
+            1,
+            math.ceil(
+                (len(images) - self.cat_len)
+                / (self.seq_len - self.cat_len)
+            ),
+        )
         for i in range(num_sample):
             last_frame = min(len(images), (i+1)*(self.seq_len-self.cat_len)+self.cat_len)
-            sample = [(os.path.join(image_root, images[x]), os.path.join(label_root, labels[x]), x)
+            sample = [(
+                os.path.join(image_root, images[x]),
+                os.path.join(label_root, labels[x]),
+                x,
+                os.path.join(centroid_root, centroid_files[x])
+                if 'NUDT-MIRSDT' in self.dataset else None,
+            )
                       for x in range(max(0, last_frame-self.seq_len), last_frame)]
             samplelist.extend([sample])
 
@@ -165,9 +222,8 @@ class TestIRSeqDataLoader(object):
 
     def _check_preprocess(self):
         if not os.path.isfile(self.seq_list_file):
-            print('No such file: {}.'.format(self.seq_list_file))
-            return False
-        else:
-            self.ann_f = np.loadtxt(self.seq_list_file, dtype=bytes).astype(str)
-            return True
-
+            raise FileNotFoundError('No such file: %s.' % self.seq_list_file)
+        self.ann_f = np.atleast_1d(
+            np.loadtxt(self.seq_list_file, dtype=bytes).astype(str)
+        )
+        return True

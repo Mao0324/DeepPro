@@ -6,6 +6,7 @@ import math
 import random
 from skimage import measure
 from torch.utils.data import Dataset
+from data_utils.loader_utils import validate_frame_pairs
 
 
 class TrainSeqDataLoader(Dataset):
@@ -82,13 +83,26 @@ class TrainSeqDataLoader(Dataset):
         images = (images - self.train_mean) / self.train_std
         t, h, w = labels.shape
         if t < self.seq_len and idx % 2 == 1:
-            images = np.concatenate((images, np.zeros([1, self.seq_len-t, h, w])), axis=1)
-            labels = np.concatenate((labels, np.zeros([self.seq_len-t, h, w])), axis=0)
+            images = np.concatenate((images, np.zeros(
+                [1, self.seq_len-t, h, w], dtype=images.dtype
+            )), axis=1)
+            labels = np.concatenate((labels, np.zeros(
+                [self.seq_len-t, h, w], dtype=labels.dtype
+            )), axis=0)
         elif t < self.seq_len and idx % 2 == 0:
-            images = np.concatenate((np.zeros([1, self.seq_len-t, h, w]), images), axis=1)
-            labels = np.concatenate((np.zeros([self.seq_len-t, h, w]), labels), axis=0)
+            images = np.concatenate((np.zeros(
+                [1, self.seq_len-t, h, w], dtype=images.dtype
+            ), images), axis=1)
+            labels = np.concatenate((np.zeros(
+                [self.seq_len-t, h, w], dtype=labels.dtype
+            ), labels), axis=0)
 
         if self.patch_size is not None:
+            if self.patch_size > h or self.patch_size > w:
+                raise ValueError(
+                    'patch_size %d exceeds image size %dx%d.'
+                    % (self.patch_size, h, w)
+                )
             if idx % 2 == 1:
                 mid_idx = int(t/2)
             else:
@@ -102,11 +116,11 @@ class TrainSeqDataLoader(Dataset):
                 tar_idx = torch.randint(0, len(props), [1])[0]
                 r0 = int(props[tar_idx].centroid[0] + (torch.rand(1)-0.5) * 2 * shake_range - self.patch_size / 2)
                 c0 = int(props[tar_idx].centroid[1] + (torch.rand(1)-0.5) * 2 * shake_range - self.patch_size / 2)
-                r0 = min(max(r0, 0), h-self.patch_size-1)
-                c0 = min(max(c0, 0), w-self.patch_size-1)
+                r0 = min(max(r0, 0), h-self.patch_size)
+                c0 = min(max(c0, 0), w-self.patch_size)
             else:
-                r0 = torch.randint(0, h - self.patch_size, [1])[0]
-                c0 = torch.randint(0, w - self.patch_size, [1])[0]
+                r0 = int(torch.randint(0, h - self.patch_size + 1, [1])[0])
+                c0 = int(torch.randint(0, w - self.patch_size + 1, [1])[0])
 
             images = images[:, :, r0:r0+self.patch_size, c0:c0+self.patch_size]
             labels = labels[:, r0:r0+self.patch_size, c0:c0+self.patch_size]
@@ -163,10 +177,19 @@ class TrainIRSeqDataLoader(TrainSeqDataLoader):
                 images = np.sort(os.listdir(image_root))
                 labels = np.sort(os.listdir(label_root))
 
+            validate_frame_pairs(
+                image_root,
+                label_root,
+                images,
+                labels,
+                seq_name,
+                minimum_frames=seq_len,
+            )
 
-            for i in range(int(seq_len*0.1), len(images)):
+            first_window_end = max(1, int(seq_len * 0.1))
+            for window_end in range(first_window_end, len(images) + 1):
                 sample = [(os.path.join(image_root, images[x]), os.path.join(label_root, labels[x]))
-                          for x in range(max(0, i-seq_len), i)]
+                          for x in range(max(0, window_end-seq_len), window_end)]
                 samplelist.extend([sample])
                 sample_p.append(len(sample))
 
@@ -175,9 +198,8 @@ class TrainIRSeqDataLoader(TrainSeqDataLoader):
 
     def _check_preprocess(self):
         if not os.path.isfile(self.seq_list_file):
-            print('No such file: {}.'.format(self.seq_list_file))
-            return False
-        else:
-            self.ann_f = np.loadtxt(self.seq_list_file, dtype=bytes).astype(str)
-            return True
-
+            raise FileNotFoundError('No such file: %s.' % self.seq_list_file)
+        self.ann_f = np.atleast_1d(
+            np.loadtxt(self.seq_list_file, dtype=bytes).astype(str)
+        )
+        return True
