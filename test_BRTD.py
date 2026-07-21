@@ -3,6 +3,7 @@ Author: Benny
 Date: Nov 2019
 """
 import argparse
+import builtins
 import os
 from data_utils.TestDataLoader import TestIRSeqDataLoader
 import torch
@@ -41,7 +42,7 @@ def parse_args():
     )
     parser.add_argument('--seqlen', type=int, default=40, help='Frame number as an input [default: 100]')
     parser.add_argument('--datapath', type=str, default='./datasets/NUDT-MIRSDT', help='Data path')
-    parser.add_argument('--dataset', type=str, default='NUDT-MIRSDT', help='dataset name [default: NUDT-MIRSDT, IRDST-simulation, RGB-T, SatVideoIRSDT]')
+    parser.add_argument('--dataset', type=str, default='NUDT-MIRSDT', help='dataset name [default: NUDT-MIRSDT, IRDST-simulation, RGB-T, SatVideoIRSDT, SatVideoIRSDT_v1]')
     parser.add_argument('--log_dir', type=str, default='NUDT-MIRSDT__2024-12-28_16-21__SoftLoUloss_DeepPro-Plus_DataL40', help='experiment root')
     parser.add_argument('--logpath', type=str, default='./log/', help='Log path: ./log/')
     parser.add_argument('--visual', action='store_true', default=False, help='visualize result [default: False]')
@@ -51,11 +52,18 @@ def parse_args():
                         help='Run optional THOP profiling after evaluation [default: 0]')
     parser.add_argument('--amp', type=int, default=0, choices=[0, 1],
                         help='Use CUDA automatic mixed precision [default: 0]')
+    parser.add_argument('--eval_chunk_rows', type=int, default=None,
+                        help='Override checkpoint eval row chunking; 0 disables it')
     return parser.parse_args()
 
 
 def count_parameters(model):
-    total_bytes = sum(p.numel() * p.element_size() for p in model.parameters())
+    # ``from numpy import *`` shadows Python's built-in sum with np.sum.
+    # Use the built-in explicitly so a generator is consumed without NumPy's
+    # deprecated generator coercion.
+    total_bytes = builtins.sum(
+        p.numel() * p.element_size() for p in model.parameters()
+    )
     return total_bytes / (1000 ** 2)  # MB (十进制)
 
 
@@ -118,6 +126,9 @@ def main(args):
     sys.path.append(str(experiment_dir))
     MODEL = importlib.import_module(model_name)
     model_config = checkpoint.get('model_config', {})
+    if args.eval_chunk_rows is not None:
+        model_config = dict(model_config)
+        model_config['eval_chunk_rows'] = args.eval_chunk_rows
     detector = MODEL.detector(
         NUM_CLASSES,
         SEQ_LEN,
@@ -207,6 +218,8 @@ def main(args):
                         first_end,
                         centroids,
                     )
+                    del images, targets, seq_midpred
+                    torch.cuda.empty_cache()
 
             if not args.attribution:
                 seq_midpred_all = accumulator.predictions

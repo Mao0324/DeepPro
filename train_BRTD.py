@@ -18,6 +18,7 @@ import numpy as np
 import random
 import torch.nn.functional as F
 import subprocess
+import json
 from sequence_utils import SequenceAccumulator, frame_range_length
 
 try:
@@ -74,7 +75,7 @@ def parse_args():
     parser.add_argument('--optimizer', type=str, default='Adam', help='Adam or SGD [default: Adam]')
     parser.add_argument('--datapath', type=str, default='./datasets/NUDT-MIRSDT')
     parser.add_argument('--dataset', type=str, default='NUDT-MIRSDT', help='dataset name [default: NUDT-MIRSDT, NUDT-MIRSDT-HiNo, '
-                                            'RGB-T, SatVideoIRSDT, IRDST-simulation, IRSatVideo-LEO]')
+                                            'RGB-T, SatVideoIRSDT, SatVideoIRSDT_v1, IRDST-simulation, IRSatVideo-LEO]')
     parser.add_argument('--log_dir', type=str, default=None, help='Log path [default: None]')
     parser.add_argument('--savepath', type=str, default='./log/', help='Save path [default: ./log/]')
     parser.add_argument('--decay_rate', type=float, default=1e-4, help='weight decay [default: 1e-4]')
@@ -94,9 +95,15 @@ def parse_args():
     parser.add_argument('--brtd_adaptive_tdc', type=int, default=1, choices=[0, 1])
     parser.add_argument('--brtd_use_gate', type=int, default=1, choices=[0, 1])
     parser.add_argument('--brtd_zero_init', type=int, default=1, choices=[0, 1])
+    parser.add_argument('--eval_chunk_rows', type=int, default=0,
+                        help='Rows per exact streaming decoder chunk in eval; 0 disables chunking')
     parser.add_argument('--run_test_after_train', type=int, default=1, choices=[0, 1])
     parser.add_argument('--amp', type=int, default=0, choices=[0, 1],
                         help='Use CUDA automatic mixed precision [default: 0]')
+    parser.add_argument('--eval_amp', type=int, default=0, choices=[0, 1],
+                        help='Use mixed precision during validation/testing [default: 0]')
+    parser.add_argument('--isolated_eval', type=int, default=1, choices=[0, 1],
+                        help='Run validation in a fresh subprocess [default: 1]')
     parser.add_argument('--accumulation_steps', type=int, default=1,
                         help='Accumulate gradients across this many batches [default: 1]')
     parser.add_argument("--spatial_ckpt", type=str, default="")
@@ -104,6 +111,13 @@ def parse_args():
     parser.add_argument("--freeze_pretrained", type=int, default=1)
 
     return parser.parse_args()
+
+
+def move_optimizer_state(optimizer, device):
+    for state in optimizer.state.values():
+        for key, value in state.items():
+            if isinstance(value, torch.Tensor):
+                state[key] = value.to(device)
 
 
 def main(args):
@@ -211,6 +225,7 @@ def main(args):
             'adaptive_tdc': bool(args.brtd_adaptive_tdc),
             'use_gate': bool(args.brtd_use_gate),
             'zero_init': bool(args.brtd_zero_init),
+            'eval_chunk_rows': args.eval_chunk_rows,
         }
         shutil.copy('networks/layers/brtd_adapter.py', str(experiment_dir))
         detector = MODEL.detector(
@@ -229,7 +244,16 @@ def main(args):
             freeze_pretrained=bool(args.freeze_pretrained),
         )
     else:
-        detector = MODEL.detector(NUM_CLASSES, SEQ_LEN, SEQ_LEN)
+        if args.model == 'DeepPro-Plus':
+            checkpoint_model_config = {
+                'eval_chunk_rows': args.eval_chunk_rows,
+            }
+        detector = MODEL.detector(
+            NUM_CLASSES,
+            SEQ_LEN,
+            SEQ_LEN,
+            **checkpoint_model_config,
+        )
 
     if args.base_ckpt:
         checkpoint = torch.load(args.base_ckpt, map_location='cpu')
@@ -305,7 +329,14 @@ def main(args):
 
     best_iou = 0
     try:
-        checkpoint = torch.load(str(experiment_dir) + '/checkpoints/best_model.pth')
+        latest_checkpoint = checkpoints_dir / 'latest_model.pth'
+        best_checkpoint = checkpoints_dir / 'best_model.pth'
+        resume_path = (
+            latest_checkpoint
+            if latest_checkpoint.is_file()
+            else best_checkpoint
+        )
+        checkpoint = torch.load(str(resume_path))
         start_epoch = checkpoint['epoch'] + 1
         if hasattr(detector, 'module'):
             detector.module.load_state_dict(checkpoint['model_state_dict'])
@@ -315,7 +346,7 @@ def main(args):
         if checkpoint.get('scaler_state_dict'):
             scaler.load_state_dict(checkpoint['scaler_state_dict'])
         best_iou = checkpoint.get('class_avg_iou', 0)
-        log_string('Use pretrain model')
+        log_string('Resume training from %s' % resume_path)
     except Exception as e:
         log_string('No existing model or failed to load checkpoint: %s' % e)
         log_string('Starting training from scratch...')
@@ -404,6 +435,23 @@ def main(args):
                 'train/lr': lr,
             }, step=epoch + 1)
 
+        if args.gpu_num > 1:
+            latest_model_state = detector.module.state_dict()
+        else:
+            latest_model_state = detector.state_dict()
+        latest_state = {
+            'epoch': epoch,
+            'model_name': args.model,
+            'class_avg_iou': best_iou,
+            'model_state_dict': latest_model_state,
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scaler_state_dict': scaler.state_dict(),
+            'model_config': checkpoint_model_config,
+        }
+        latest_path = checkpoints_dir / 'latest_model.pth'
+        torch.save(latest_state, latest_path)
+        log_string('Saved pre-evaluation checkpoint at %s' % latest_path)
+
         if (epoch + 1) % 5 == 0 or epoch + 1 == args.epoch:
             logger.info('Save model...')
             savepath = str(checkpoints_dir) + '/epoch_' + str(epoch+1) + '_model.pth'
@@ -428,6 +476,65 @@ def main(args):
                 }
             torch.save(state, savepath)
             log_string('Saving model....')
+            del state
+
+        del images, targets, seq_midpred, loss
+        torch.cuda.empty_cache()
+
+        if args.isolated_eval:
+            del latest_model_state, latest_state
+            detector = detector.cpu()
+            criterion = criterion.cpu()
+            move_optimizer_state(optimizer, 'cpu')
+            torch.cuda.empty_cache()
+
+            metrics_path = experiment_dir / (
+                'validation_metrics_epoch_%03d.json' % (epoch + 1)
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    os.path.join(BASE_DIR, 'validate_BRTD.py'),
+                    '--checkpoint_path', str(latest_path),
+                    '--metrics_path', str(metrics_path),
+                    '--gpu', args.gpu,
+                    '--seqlen', str(args.seqlen),
+                    '--datapath', args.datapath,
+                    '--dataset', args.dataset,
+                    '--experiment_dir', str(experiment_dir),
+                    '--threshold_eval', str(args.threshold_eval),
+                    '--amp', str(args.eval_amp),
+                ],
+                check=True,
+            )
+            with metrics_path.open('r', encoding='utf-8') as file:
+                validation_metrics = json.load(file)
+            mIoU_mid = float(validation_metrics['iou'])
+            log_string('Eval avg class IoU of prediction: %f' % mIoU_mid)
+
+            is_best = mIoU_mid >= best_iou
+            if is_best:
+                best_iou = mIoU_mid
+            checkpoint = torch.load(str(latest_path), map_location='cpu')
+            checkpoint['class_avg_iou'] = best_iou
+            torch.save(checkpoint, str(latest_path))
+            if is_best:
+                best_path = checkpoints_dir / 'best_model.pth'
+                torch.save(checkpoint, str(best_path))
+                log_string('Saved best model at %s' % best_path)
+            del checkpoint, validation_metrics
+
+            detector = detector.cuda()
+            criterion = criterion.cuda()
+            move_optimizer_state(optimizer, 'cuda')
+            log_string('Best mIoU_mid: %f' % best_iou)
+            if swanlab_run is not None:
+                swanlab.log({
+                    'eval/iou': mIoU_mid,
+                    'eval/best_iou': best_iou,
+                }, step=epoch + 1)
+            global_epoch += 1
+            continue
 
         '''Evaluate'''
         with torch.no_grad():
@@ -467,7 +574,7 @@ def main(args):
                 for i, (images, targets, _, first_end) in enumerate(seq_dataloader):
                     images, targets = images.float().cuda(), targets.float().cuda()
 
-                    with torch.cuda.amp.autocast(enabled=bool(args.amp)):
+                    with torch.cuda.amp.autocast(enabled=bool(args.eval_amp)):
                         _, seq_midpred = detector(images)
                         if seq_midpred.shape[-2:] != targets.shape[-2:]:
                             seq_midpred = F.interpolate(
@@ -479,7 +586,6 @@ def main(args):
                             seq_midpred[:, :valid_length],
                             targets[:, :valid_length],
                         )
-
                     loss_g_sum += eval_loss_window.item()
 
                     accumulator.add(
@@ -487,6 +593,8 @@ def main(args):
                         targets.cpu(),
                         first_end,
                     )
+                    del images, targets, seq_midpred, eval_loss_window
+                    torch.cuda.empty_cache()
 
                 pred_choice_mid = (
                     accumulator.predictions.numpy() > args.threshold_eval
@@ -530,6 +638,8 @@ def main(args):
                 torch.save(state, savepath)
                 log_string('Saving model....')
             log_string('Best mIoU_mid: %f' % best_iou)
+            latest_state['class_avg_iou'] = best_iou
+            torch.save(latest_state, latest_path)
             if swanlab_run is not None:
                 swanlab.log({
                     'eval/loss': eval_loss,
@@ -541,6 +651,11 @@ def main(args):
 
     if swanlab_run is not None and hasattr(swanlab, 'finish'):
         swanlab.finish()
+
+    detector = detector.cpu()
+    criterion = criterion.cpu()
+    move_optimizer_state(optimizer, 'cpu')
+    torch.cuda.empty_cache()
 
 
 if __name__ == '__main__':
@@ -558,7 +673,7 @@ if __name__ == '__main__':
                 '--dataset', args.dataset,
                 '--log_dir', args.log_dir,
                 '--logpath', args.savepath,
-                '--amp', str(args.amp),
+                '--amp', str(args.eval_amp),
             ],
             check=True,
         )

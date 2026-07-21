@@ -1,6 +1,36 @@
 from pathlib import Path
 
 
+SATVIDEO_V1_DATASET = 'SatVideoIRSDT_v1'
+SATVIDEO_V1_TRAIN_MEAN = 82.20451526467026
+SATVIDEO_V1_TRAIN_STD = 50.753589902516666
+
+
+def discover_split_sequences(data_root, split):
+    """Discover ``<split>/<sequence>/{img,mask}`` sequence directories."""
+    split_root = Path(data_root) / split
+    if not split_root.is_dir():
+        raise FileNotFoundError(
+            'Dataset split directory does not exist: %s' % split_root
+        )
+
+    sequence_dirs = sorted(path for path in split_root.iterdir() if path.is_dir())
+    if not sequence_dirs:
+        raise ValueError('No sequence directories found in %s.' % split_root)
+
+    invalid = [
+        path.name
+        for path in sequence_dirs
+        if not (path / 'img').is_dir() or not (path / 'mask').is_dir()
+    ]
+    if invalid:
+        raise ValueError(
+            'Sequences in %s must contain img and mask directories: %s'
+            % (split_root, ', '.join(invalid[:10]))
+        )
+    return [path.name for path in sequence_dirs]
+
+
 def validate_frame_pairs(
     image_root,
     label_root,

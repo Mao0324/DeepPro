@@ -5,7 +5,13 @@ from PIL import Image
 import math
 import random
 from torch.utils.data import Dataset
-from data_utils.loader_utils import validate_frame_pairs
+from data_utils.loader_utils import (
+    SATVIDEO_V1_DATASET,
+    SATVIDEO_V1_TRAIN_MEAN,
+    SATVIDEO_V1_TRAIN_STD,
+    discover_split_sequences,
+    validate_frame_pairs,
+)
 
 
 class TestSeqDataLoader(Dataset):
@@ -27,6 +33,10 @@ class TestSeqDataLoader(Dataset):
         elif dataset == 'SatVideoIRSDT':
             self.train_mean = 111.47
             self.train_std = 22.43
+        elif dataset == SATVIDEO_V1_DATASET:
+            # Always use training-split statistics for validation/test data.
+            self.train_mean = SATVIDEO_V1_TRAIN_MEAN
+            self.train_std = SATVIDEO_V1_TRAIN_STD
         elif dataset == 'IRSatVideo-LEO':
             self.train_mean = 72.104
             self.train_std = 12.303
@@ -122,7 +132,10 @@ class TestIRSeqDataLoader(object):
         self.seq_len = seq_len
         self.cat_len = cat_len
         self.transform = transform
-        if 'NUDT-MIRSDT' in dataset or 'RGB-T' in dataset:
+        if dataset == SATVIDEO_V1_DATASET:
+            self.seq_list_file = None
+            self.seq_names = discover_split_sequences(data_root, 'val')
+        elif 'NUDT-MIRSDT' in dataset or 'RGB-T' in dataset:
             self.seq_list_file = os.path.join(data_root, 'test.txt')
         elif dataset == 'IRDST-simulation':
             self.seq_list_file = os.path.join(data_root, 'img_idx/test_IRDST-simulation.txt')
@@ -130,8 +143,13 @@ class TestIRSeqDataLoader(object):
             self.seq_list_file = os.path.join(data_root, 'val.txt')
         elif dataset == 'IRSatVideo-LEO':
             self.seq_list_file = os.path.join(data_root, 'annotations/val_sequences.txt')
-        self._check_preprocess()
-        self.seq_names = list(dict.fromkeys([x.split('/')[0] for x in self.ann_f]))
+        else:
+            raise ValueError('Unsupported test dataset: %s' % dataset)
+        if self.seq_list_file is not None:
+            self._check_preprocess()
+            self.seq_names = list(dict.fromkeys([
+                x.split('/')[0] for x in self.ann_f
+            ]))
         # self.seq_names = list([str(self.ann_f)])
 
     def __len__(self):
@@ -174,7 +192,7 @@ class TestIRSeqDataLoader(object):
             labels = os.listdir(label_root)
             images.sort(key=lambda x:int(x.split('.')[0]))
             labels.sort(key=lambda x:int(x.split('.')[0]))
-        elif self.dataset == 'SatVideoIRSDT':
+        elif self.dataset in ['SatVideoIRSDT', SATVIDEO_V1_DATASET]:
             image_root = os.path.join(self.data_root, 'val', seq_name, 'img')
             label_root = os.path.join(self.data_root, 'val', seq_name, 'mask')
             images = np.sort(os.listdir(image_root))

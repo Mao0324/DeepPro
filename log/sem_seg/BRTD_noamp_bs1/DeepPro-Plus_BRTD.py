@@ -18,13 +18,9 @@ class detector(nn.Module):
         adaptive_tdc=True,
         use_gate=True,
         zero_init=True,
-        eval_chunk_rows=0,
     ):
         super().__init__()
         self.out_len = out_len
-        self.eval_chunk_rows = int(eval_chunk_rows)
-        if self.eval_chunk_rows < 0:
-            raise ValueError('eval_chunk_rows must be non-negative.')
 
         # Keep the complete DeepPro-Plus stem and temporal-profile backbone.
         self.conv_in = nn.Sequential(
@@ -72,28 +68,9 @@ class detector(nn.Module):
 
         seq_feats = self.layer1(seq_feats)
         seq_feats = seq_feats.permute(0, 3, 4, 1, 2)
-        if (
-            not self.training
-            and self.eval_chunk_rows > 0
-            and seq_feats.shape[1] > self.eval_chunk_rows
-        ):
-            decoded_chunks = []
-            for row_start in range(
-                0,
-                seq_feats.shape[1],
-                self.eval_chunk_rows,
-            ):
-                row_end = min(
-                    row_start + self.eval_chunk_rows,
-                    seq_feats.shape[1],
-                )
-                chunk = self.TPro(seq_feats[:, row_start:row_end])
-                decoded_chunks.append(self.conv_out1(chunk))
-            seq_feats = torch.cat(decoded_chunks, dim=3)
-        else:
-            seq_feats = self.TPro(seq_feats)
-            seq_feats = self.conv_out1(seq_feats)
+        seq_feats = self.TPro(seq_feats)
 
+        seq_feats = self.conv_out1(seq_feats)
         seq_midseg = self.conv_out2(seq_feats).squeeze(dim=1)
 
         if return_aux:

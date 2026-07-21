@@ -1,0 +1,262 @@
+2026-07-21 10:16:06,919 - Model - INFO - PARAMETER ...
+2026-07-21 10:16:06,919 - Model - INFO - Namespace(accumulation_steps=1, amp=0, base_ckpt='', base_lr_mult=1.0, batch_size=4, brtd_adaptive_tdc=1, brtd_use_background=1, brtd_use_gate=1, brtd_zero_init=1, datapath='/home/user/4T_Storage/SJY/CSIG2026/datasets/NUDT-MIRSDT-Noise8.0_FJY', dataset='NUDT-MIRSDT-HiNo', decay_rate=0.0001, epoch=32, eval_amp=0, freeze_pretrained=1, gpu='0', gpu_num=1, isolated_eval=1, learning_rate=0.001, log_dir='NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40', lr_decay=0.7, model='DeepPro-Plus_BRTD', optimizer='Adam', patch_size=128, run_test_after_train=1, sample_rate=0.1, savepath='./log/', seed=46, seqlen=40, spatial_ckpt='', st_ckpt='', step_size=10, swanlab_project='DeepPro', threshold_eval=0.5, use_swanlab=1)
+2026-07-21 10:16:09,882 - Model - INFO - The number of training data is: 776
+2026-07-21 10:16:09,883 - Model - INFO - The number of test data is: 20 sequences
+2026-07-21 10:16:10,367 - Model - INFO - No existing model or failed to load checkpoint: [Errno 2] No such file or directory: 'log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/best_model.pth'
+2026-07-21 10:16:10,367 - Model - INFO - Starting training from scratch...
+2026-07-21 10:16:10,368 - Model - INFO - **** Epoch 1 (1/32) ****
+2026-07-21 10:16:10,368 - Model - INFO - Learning rate:0.001000
+2026-07-21 10:17:47,949 - Model - INFO - Training mean loss: 0.995313
+2026-07-21 10:17:47,950 - Model - INFO - Training accuracy (IoU) of prediction: 0.005190
+2026-07-21 10:17:47,981 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:18:05,155 - Model - INFO - Eval avg class IoU of prediction: 0.065609
+2026-07-21 10:18:05,204 - Model - INFO - Saved best model at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/best_model.pth
+2026-07-21 10:18:05,221 - Model - INFO - Best mIoU_mid: 0.065609
+2026-07-21 10:18:05,222 - Model - INFO - **** Epoch 2 (2/32) ****
+2026-07-21 10:18:05,222 - Model - INFO - Learning rate:0.001000
+2026-07-21 10:19:42,880 - Model - INFO - Training mean loss: 0.989685
+2026-07-21 10:19:42,881 - Model - INFO - Training accuracy (IoU) of prediction: 0.058013
+2026-07-21 10:19:42,922 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:20:00,082 - Model - INFO - Eval avg class IoU of prediction: 0.067685
+2026-07-21 10:20:00,115 - Model - INFO - Saved best model at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/best_model.pth
+2026-07-21 10:20:00,127 - Model - INFO - Best mIoU_mid: 0.067685
+2026-07-21 10:20:00,127 - Model - INFO - **** Epoch 3 (3/32) ****
+2026-07-21 10:20:00,128 - Model - INFO - Learning rate:0.001000
+2026-07-21 10:21:37,808 - Model - INFO - Training mean loss: 0.884613
+2026-07-21 10:21:37,809 - Model - INFO - Training accuracy (IoU) of prediction: 0.121096
+2026-07-21 10:21:37,838 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:21:55,261 - Model - INFO - Eval avg class IoU of prediction: 0.381332
+2026-07-21 10:21:55,319 - Model - INFO - Saved best model at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/best_model.pth
+2026-07-21 10:21:55,331 - Model - INFO - Best mIoU_mid: 0.381332
+2026-07-21 10:21:55,332 - Model - INFO - **** Epoch 4 (4/32) ****
+2026-07-21 10:21:55,332 - Model - INFO - Learning rate:0.001000
+2026-07-21 10:23:33,249 - Model - INFO - Training mean loss: 0.662398
+2026-07-21 10:23:33,249 - Model - INFO - Training accuracy (IoU) of prediction: 0.437440
+2026-07-21 10:23:33,277 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:23:50,725 - Model - INFO - Eval avg class IoU of prediction: 0.389546
+2026-07-21 10:23:50,758 - Model - INFO - Saved best model at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/best_model.pth
+2026-07-21 10:23:50,771 - Model - INFO - Best mIoU_mid: 0.389546
+2026-07-21 10:23:50,772 - Model - INFO - **** Epoch 5 (5/32) ****
+2026-07-21 10:23:50,772 - Model - INFO - Learning rate:0.001000
+2026-07-21 10:25:28,522 - Model - INFO - Training mean loss: 0.608873
+2026-07-21 10:25:28,522 - Model - INFO - Training accuracy (IoU) of prediction: 0.482944
+2026-07-21 10:25:28,565 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:25:28,565 - Model - INFO - Save model...
+2026-07-21 10:25:28,566 - Model - INFO - Saving at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/epoch_5_model.pth
+2026-07-21 10:25:28,585 - Model - INFO - Saving model....
+2026-07-21 10:25:45,974 - Model - INFO - Eval avg class IoU of prediction: 0.395810
+2026-07-21 10:25:46,022 - Model - INFO - Saved best model at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/best_model.pth
+2026-07-21 10:25:46,035 - Model - INFO - Best mIoU_mid: 0.395810
+2026-07-21 10:25:46,036 - Model - INFO - **** Epoch 6 (6/32) ****
+2026-07-21 10:25:46,036 - Model - INFO - Learning rate:0.001000
+2026-07-21 10:27:23,930 - Model - INFO - Training mean loss: 0.583139
+2026-07-21 10:27:23,930 - Model - INFO - Training accuracy (IoU) of prediction: 0.505567
+2026-07-21 10:27:23,954 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:27:41,257 - Model - INFO - Eval avg class IoU of prediction: 0.434164
+2026-07-21 10:27:41,320 - Model - INFO - Saved best model at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/best_model.pth
+2026-07-21 10:27:41,332 - Model - INFO - Best mIoU_mid: 0.434164
+2026-07-21 10:27:41,333 - Model - INFO - **** Epoch 7 (7/32) ****
+2026-07-21 10:27:41,333 - Model - INFO - Learning rate:0.001000
+2026-07-21 10:29:19,150 - Model - INFO - Training mean loss: 0.552414
+2026-07-21 10:29:19,150 - Model - INFO - Training accuracy (IoU) of prediction: 0.514600
+2026-07-21 10:29:19,180 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:29:36,487 - Model - INFO - Eval avg class IoU of prediction: 0.372940
+2026-07-21 10:29:36,551 - Model - INFO - Best mIoU_mid: 0.434164
+2026-07-21 10:29:36,552 - Model - INFO - **** Epoch 8 (8/32) ****
+2026-07-21 10:29:36,552 - Model - INFO - Learning rate:0.001000
+2026-07-21 10:31:14,282 - Model - INFO - Training mean loss: 0.554834
+2026-07-21 10:31:14,282 - Model - INFO - Training accuracy (IoU) of prediction: 0.520562
+2026-07-21 10:31:14,309 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:31:31,605 - Model - INFO - Eval avg class IoU of prediction: 0.413392
+2026-07-21 10:31:31,644 - Model - INFO - Best mIoU_mid: 0.434164
+2026-07-21 10:31:31,645 - Model - INFO - **** Epoch 9 (9/32) ****
+2026-07-21 10:31:31,645 - Model - INFO - Learning rate:0.001000
+2026-07-21 10:33:09,397 - Model - INFO - Training mean loss: 0.557490
+2026-07-21 10:33:09,398 - Model - INFO - Training accuracy (IoU) of prediction: 0.519696
+2026-07-21 10:33:09,442 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:33:26,830 - Model - INFO - Eval avg class IoU of prediction: 0.423082
+2026-07-21 10:33:26,904 - Model - INFO - Best mIoU_mid: 0.434164
+2026-07-21 10:33:26,905 - Model - INFO - **** Epoch 10 (10/32) ****
+2026-07-21 10:33:26,906 - Model - INFO - Learning rate:0.001000
+2026-07-21 10:35:04,692 - Model - INFO - Training mean loss: 0.538604
+2026-07-21 10:35:04,693 - Model - INFO - Training accuracy (IoU) of prediction: 0.533706
+2026-07-21 10:35:04,737 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:35:04,737 - Model - INFO - Save model...
+2026-07-21 10:35:04,737 - Model - INFO - Saving at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/epoch_10_model.pth
+2026-07-21 10:35:04,756 - Model - INFO - Saving model....
+2026-07-21 10:35:22,178 - Model - INFO - Eval avg class IoU of prediction: 0.428230
+2026-07-21 10:35:22,221 - Model - INFO - Best mIoU_mid: 0.434164
+2026-07-21 10:35:22,222 - Model - INFO - **** Epoch 11 (11/32) ****
+2026-07-21 10:35:22,222 - Model - INFO - Learning rate:0.000700
+2026-07-21 10:37:00,348 - Model - INFO - Training mean loss: 0.526357
+2026-07-21 10:37:00,348 - Model - INFO - Training accuracy (IoU) of prediction: 0.552198
+2026-07-21 10:37:00,432 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:37:17,683 - Model - INFO - Eval avg class IoU of prediction: 0.432515
+2026-07-21 10:37:17,716 - Model - INFO - Best mIoU_mid: 0.434164
+2026-07-21 10:37:17,717 - Model - INFO - **** Epoch 12 (12/32) ****
+2026-07-21 10:37:17,718 - Model - INFO - Learning rate:0.000700
+2026-07-21 10:38:55,650 - Model - INFO - Training mean loss: 0.509682
+2026-07-21 10:38:55,650 - Model - INFO - Training accuracy (IoU) of prediction: 0.566506
+2026-07-21 10:38:55,674 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:39:13,276 - Model - INFO - Eval avg class IoU of prediction: 0.435357
+2026-07-21 10:39:13,315 - Model - INFO - Saved best model at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/best_model.pth
+2026-07-21 10:39:13,327 - Model - INFO - Best mIoU_mid: 0.435357
+2026-07-21 10:39:13,328 - Model - INFO - **** Epoch 13 (13/32) ****
+2026-07-21 10:39:13,329 - Model - INFO - Learning rate:0.000700
+2026-07-21 10:40:51,196 - Model - INFO - Training mean loss: 0.507551
+2026-07-21 10:40:51,196 - Model - INFO - Training accuracy (IoU) of prediction: 0.568212
+2026-07-21 10:40:51,264 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:41:08,990 - Model - INFO - Eval avg class IoU of prediction: 0.446968
+2026-07-21 10:41:09,050 - Model - INFO - Saved best model at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/best_model.pth
+2026-07-21 10:41:09,063 - Model - INFO - Best mIoU_mid: 0.446968
+2026-07-21 10:41:09,064 - Model - INFO - **** Epoch 14 (14/32) ****
+2026-07-21 10:41:09,064 - Model - INFO - Learning rate:0.000700
+2026-07-21 10:42:46,811 - Model - INFO - Training mean loss: 0.510659
+2026-07-21 10:42:46,812 - Model - INFO - Training accuracy (IoU) of prediction: 0.574919
+2026-07-21 10:42:46,835 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:43:04,232 - Model - INFO - Eval avg class IoU of prediction: 0.444208
+2026-07-21 10:43:04,542 - Model - INFO - Best mIoU_mid: 0.446968
+2026-07-21 10:43:04,544 - Model - INFO - **** Epoch 15 (15/32) ****
+2026-07-21 10:43:04,545 - Model - INFO - Learning rate:0.000700
+2026-07-21 10:44:42,162 - Model - INFO - Training mean loss: 0.512230
+2026-07-21 10:44:42,163 - Model - INFO - Training accuracy (IoU) of prediction: 0.570980
+2026-07-21 10:44:42,267 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:44:42,267 - Model - INFO - Save model...
+2026-07-21 10:44:42,268 - Model - INFO - Saving at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/epoch_15_model.pth
+2026-07-21 10:44:42,304 - Model - INFO - Saving model....
+2026-07-21 10:44:59,939 - Model - INFO - Eval avg class IoU of prediction: 0.420323
+2026-07-21 10:45:00,001 - Model - INFO - Best mIoU_mid: 0.446968
+2026-07-21 10:45:00,003 - Model - INFO - **** Epoch 16 (16/32) ****
+2026-07-21 10:45:00,003 - Model - INFO - Learning rate:0.000700
+2026-07-21 10:46:37,652 - Model - INFO - Training mean loss: 0.496999
+2026-07-21 10:46:37,653 - Model - INFO - Training accuracy (IoU) of prediction: 0.571880
+2026-07-21 10:46:37,677 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:46:54,851 - Model - INFO - Eval avg class IoU of prediction: 0.440815
+2026-07-21 10:46:54,917 - Model - INFO - Best mIoU_mid: 0.446968
+2026-07-21 10:46:54,917 - Model - INFO - **** Epoch 17 (17/32) ****
+2026-07-21 10:46:54,918 - Model - INFO - Learning rate:0.000700
+2026-07-21 10:48:32,394 - Model - INFO - Training mean loss: 0.490930
+2026-07-21 10:48:32,395 - Model - INFO - Training accuracy (IoU) of prediction: 0.582016
+2026-07-21 10:48:32,431 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:48:49,806 - Model - INFO - Eval avg class IoU of prediction: 0.439501
+2026-07-21 10:48:49,861 - Model - INFO - Best mIoU_mid: 0.446968
+2026-07-21 10:48:49,862 - Model - INFO - **** Epoch 18 (18/32) ****
+2026-07-21 10:48:49,862 - Model - INFO - Learning rate:0.000700
+2026-07-21 10:50:27,676 - Model - INFO - Training mean loss: 0.499274
+2026-07-21 10:50:27,883 - Model - INFO - Training accuracy (IoU) of prediction: 0.586827
+2026-07-21 10:50:27,933 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:50:45,613 - Model - INFO - Eval avg class IoU of prediction: 0.450774
+2026-07-21 10:50:46,137 - Model - INFO - Saved best model at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/best_model.pth
+2026-07-21 10:50:46,162 - Model - INFO - Best mIoU_mid: 0.450774
+2026-07-21 10:50:46,164 - Model - INFO - **** Epoch 19 (19/32) ****
+2026-07-21 10:50:46,164 - Model - INFO - Learning rate:0.000700
+2026-07-21 10:52:24,046 - Model - INFO - Training mean loss: 0.488723
+2026-07-21 10:52:24,047 - Model - INFO - Training accuracy (IoU) of prediction: 0.586879
+2026-07-21 10:52:24,167 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:52:41,591 - Model - INFO - Eval avg class IoU of prediction: 0.440525
+2026-07-21 10:52:41,675 - Model - INFO - Best mIoU_mid: 0.450774
+2026-07-21 10:52:41,676 - Model - INFO - **** Epoch 20 (20/32) ****
+2026-07-21 10:52:41,677 - Model - INFO - Learning rate:0.000700
+2026-07-21 10:54:19,153 - Model - INFO - Training mean loss: 0.479378
+2026-07-21 10:54:19,153 - Model - INFO - Training accuracy (IoU) of prediction: 0.598905
+2026-07-21 10:54:19,184 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:54:19,184 - Model - INFO - Save model...
+2026-07-21 10:54:19,185 - Model - INFO - Saving at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/epoch_20_model.pth
+2026-07-21 10:54:19,203 - Model - INFO - Saving model....
+2026-07-21 10:54:36,398 - Model - INFO - Eval avg class IoU of prediction: 0.433965
+2026-07-21 10:54:36,473 - Model - INFO - Best mIoU_mid: 0.450774
+2026-07-21 10:54:36,474 - Model - INFO - **** Epoch 21 (21/32) ****
+2026-07-21 10:54:36,475 - Model - INFO - Learning rate:0.000490
+2026-07-21 10:56:13,844 - Model - INFO - Training mean loss: 0.473431
+2026-07-21 10:56:13,845 - Model - INFO - Training accuracy (IoU) of prediction: 0.604531
+2026-07-21 10:56:13,872 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:56:31,343 - Model - INFO - Eval avg class IoU of prediction: 0.438410
+2026-07-21 10:56:31,376 - Model - INFO - Best mIoU_mid: 0.450774
+2026-07-21 10:56:31,376 - Model - INFO - **** Epoch 22 (22/32) ****
+2026-07-21 10:56:31,377 - Model - INFO - Learning rate:0.000490
+2026-07-21 10:58:09,260 - Model - INFO - Training mean loss: 0.491702
+2026-07-21 10:58:09,260 - Model - INFO - Training accuracy (IoU) of prediction: 0.600164
+2026-07-21 10:58:09,284 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 10:58:27,089 - Model - INFO - Eval avg class IoU of prediction: 0.454280
+2026-07-21 10:58:27,167 - Model - INFO - Saved best model at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/best_model.pth
+2026-07-21 10:58:27,180 - Model - INFO - Best mIoU_mid: 0.454280
+2026-07-21 10:58:27,181 - Model - INFO - **** Epoch 23 (23/32) ****
+2026-07-21 10:58:27,181 - Model - INFO - Learning rate:0.000490
+2026-07-21 11:00:07,198 - Model - INFO - Training mean loss: 0.465191
+2026-07-21 11:00:07,199 - Model - INFO - Training accuracy (IoU) of prediction: 0.605927
+2026-07-21 11:00:07,222 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 11:00:25,840 - Model - INFO - Eval avg class IoU of prediction: 0.450597
+2026-07-21 11:00:25,893 - Model - INFO - Best mIoU_mid: 0.454280
+2026-07-21 11:00:25,894 - Model - INFO - **** Epoch 24 (24/32) ****
+2026-07-21 11:00:25,894 - Model - INFO - Learning rate:0.000490
+2026-07-21 11:02:10,261 - Model - INFO - Training mean loss: 0.491599
+2026-07-21 11:02:10,262 - Model - INFO - Training accuracy (IoU) of prediction: 0.603136
+2026-07-21 11:02:10,301 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 11:02:27,630 - Model - INFO - Eval avg class IoU of prediction: 0.434059
+2026-07-21 11:02:27,698 - Model - INFO - Best mIoU_mid: 0.454280
+2026-07-21 11:02:27,699 - Model - INFO - **** Epoch 25 (25/32) ****
+2026-07-21 11:02:27,700 - Model - INFO - Learning rate:0.000490
+2026-07-21 11:04:05,616 - Model - INFO - Training mean loss: 0.463854
+2026-07-21 11:04:05,616 - Model - INFO - Training accuracy (IoU) of prediction: 0.609572
+2026-07-21 11:04:05,641 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 11:04:05,642 - Model - INFO - Save model...
+2026-07-21 11:04:05,642 - Model - INFO - Saving at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/epoch_25_model.pth
+2026-07-21 11:04:05,660 - Model - INFO - Saving model....
+2026-07-21 11:04:22,949 - Model - INFO - Eval avg class IoU of prediction: 0.440734
+2026-07-21 11:04:23,019 - Model - INFO - Best mIoU_mid: 0.454280
+2026-07-21 11:04:23,020 - Model - INFO - **** Epoch 26 (26/32) ****
+2026-07-21 11:04:23,021 - Model - INFO - Learning rate:0.000490
+2026-07-21 11:06:00,856 - Model - INFO - Training mean loss: 0.467076
+2026-07-21 11:06:00,856 - Model - INFO - Training accuracy (IoU) of prediction: 0.610320
+2026-07-21 11:06:00,889 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 11:06:18,163 - Model - INFO - Eval avg class IoU of prediction: 0.447959
+2026-07-21 11:06:18,200 - Model - INFO - Best mIoU_mid: 0.454280
+2026-07-21 11:06:18,201 - Model - INFO - **** Epoch 27 (27/32) ****
+2026-07-21 11:06:18,201 - Model - INFO - Learning rate:0.000490
+2026-07-21 11:07:56,186 - Model - INFO - Training mean loss: 0.465378
+2026-07-21 11:07:56,187 - Model - INFO - Training accuracy (IoU) of prediction: 0.617330
+2026-07-21 11:07:56,224 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 11:08:13,691 - Model - INFO - Eval avg class IoU of prediction: 0.440780
+2026-07-21 11:08:13,750 - Model - INFO - Best mIoU_mid: 0.454280
+2026-07-21 11:08:13,751 - Model - INFO - **** Epoch 28 (28/32) ****
+2026-07-21 11:08:13,752 - Model - INFO - Learning rate:0.000490
+2026-07-21 11:09:51,965 - Model - INFO - Training mean loss: 0.467086
+2026-07-21 11:09:51,965 - Model - INFO - Training accuracy (IoU) of prediction: 0.595501
+2026-07-21 11:09:52,002 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 11:10:09,672 - Model - INFO - Eval avg class IoU of prediction: 0.453573
+2026-07-21 11:10:09,708 - Model - INFO - Best mIoU_mid: 0.454280
+2026-07-21 11:10:09,708 - Model - INFO - **** Epoch 29 (29/32) ****
+2026-07-21 11:10:09,709 - Model - INFO - Learning rate:0.000490
+2026-07-21 11:11:47,365 - Model - INFO - Training mean loss: 0.453421
+2026-07-21 11:11:47,366 - Model - INFO - Training accuracy (IoU) of prediction: 0.620957
+2026-07-21 11:11:47,406 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 11:12:04,741 - Model - INFO - Eval avg class IoU of prediction: 0.467174
+2026-07-21 11:12:04,774 - Model - INFO - Saved best model at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/best_model.pth
+2026-07-21 11:12:04,788 - Model - INFO - Best mIoU_mid: 0.467174
+2026-07-21 11:12:04,788 - Model - INFO - **** Epoch 30 (30/32) ****
+2026-07-21 11:12:04,789 - Model - INFO - Learning rate:0.000490
+2026-07-21 11:13:42,640 - Model - INFO - Training mean loss: 0.461417
+2026-07-21 11:13:42,640 - Model - INFO - Training accuracy (IoU) of prediction: 0.616131
+2026-07-21 11:13:42,675 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 11:13:42,676 - Model - INFO - Save model...
+2026-07-21 11:13:42,676 - Model - INFO - Saving at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/epoch_30_model.pth
+2026-07-21 11:13:42,695 - Model - INFO - Saving model....
+2026-07-21 11:13:59,956 - Model - INFO - Eval avg class IoU of prediction: 0.459804
+2026-07-21 11:13:59,991 - Model - INFO - Best mIoU_mid: 0.467174
+2026-07-21 11:13:59,992 - Model - INFO - **** Epoch 31 (31/32) ****
+2026-07-21 11:13:59,992 - Model - INFO - Learning rate:0.000343
+2026-07-21 11:15:37,656 - Model - INFO - Training mean loss: 0.455222
+2026-07-21 11:15:37,656 - Model - INFO - Training accuracy (IoU) of prediction: 0.630610
+2026-07-21 11:15:37,687 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 11:15:54,819 - Model - INFO - Eval avg class IoU of prediction: 0.449372
+2026-07-21 11:15:54,855 - Model - INFO - Best mIoU_mid: 0.467174
+2026-07-21 11:15:54,856 - Model - INFO - **** Epoch 32 (32/32) ****
+2026-07-21 11:15:54,857 - Model - INFO - Learning rate:0.000343
+2026-07-21 11:17:32,177 - Model - INFO - Training mean loss: 0.479598
+2026-07-21 11:17:32,177 - Model - INFO - Training accuracy (IoU) of prediction: 0.611336
+2026-07-21 11:17:32,209 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/latest_model.pth
+2026-07-21 11:17:32,210 - Model - INFO - Save model...
+2026-07-21 11:17:32,210 - Model - INFO - Saving at log/sem_seg/NUDT-MIRSDT-HiNo__2026-07-21_10-16__SoftLoUloss_DeepPro-Plus_BRTD_DataL40/checkpoints/epoch_32_model.pth
+2026-07-21 11:17:32,229 - Model - INFO - Saving model....
+2026-07-21 11:17:49,821 - Model - INFO - Eval avg class IoU of prediction: 0.445961
+2026-07-21 11:17:49,889 - Model - INFO - Best mIoU_mid: 0.467174

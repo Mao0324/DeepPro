@@ -10,9 +10,18 @@ import numpy as np
 
 
 class detector(nn.Module):
-    def __init__(self, num_classes, seqlen=100, out_len=100):
+    def __init__(
+        self,
+        num_classes,
+        seqlen=100,
+        out_len=100,
+        eval_chunk_rows=0,
+    ):
         super(detector, self).__init__()
         self.out_len = out_len
+        self.eval_chunk_rows = int(eval_chunk_rows)
+        if self.eval_chunk_rows < 0:
+            raise ValueError('eval_chunk_rows must be non-negative.')
         self.conv_in = nn.Sequential(SDifferenceConv(in_channels=1, out_channels=8, kernel_size=(5,7,7), stride=(1,1,1), padding=(2,3,3)),
                                      nn.BatchNorm3d(8), nn.ReLU(inplace=True))
         self.layer1 = nn.Sequential(STD_Resblock(8, 16), STD_Resblock(16, 32))
@@ -27,9 +36,28 @@ class detector(nn.Module):
         seq_feats = self.layer1(seq_feats)  ## 20.771G
 
         seq_feats = seq_feats.permute(0, 3, 4, 1, 2)
-        seq_feats = self.TPro(seq_feats)
+        if (
+            not self.training
+            and self.eval_chunk_rows > 0
+            and seq_feats.shape[1] > self.eval_chunk_rows
+        ):
+            decoded_chunks = []
+            for row_start in range(
+                0,
+                seq_feats.shape[1],
+                self.eval_chunk_rows,
+            ):
+                row_end = min(
+                    row_start + self.eval_chunk_rows,
+                    seq_feats.shape[1],
+                )
+                chunk = self.TPro(seq_feats[:, row_start:row_end])
+                decoded_chunks.append(self.conv_out1(chunk))
+            seq_feats = torch.cat(decoded_chunks, dim=3)
+        else:
+            seq_feats = self.TPro(seq_feats)
+            seq_feats = self.conv_out1(seq_feats)
 
-        seq_feats = self.conv_out1(seq_feats)
         seq_midout = self.conv_out2(seq_feats)
         seq_midseg = seq_midout.squeeze(dim=1)    ## b, t, h, w
 

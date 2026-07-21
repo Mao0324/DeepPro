@@ -31,14 +31,20 @@ class TPro(nn.Module):
         value = input / (self.seqlen**0.5)
         value = value.view(bs, h, w, self.num_head, self.hidden_dim, slen)
 
-        qkv = input.new_empty(bs, d, self.out_len, h, w)
+        # Keep this buffer in FP32, matching the original implementation even
+        # under autocast. Large FP16 BatchNorm3d inputs have caused illegal
+        # memory accesses on some CUDA/cuDNN combinations.
+        qkv = torch.zeros(
+            [bs, h, w, self.num_head, self.hidden_dim, self.out_len],
+            device=input.device,
+            dtype=torch.float32,
+        )
         for i in range(self.num_head):
-            head_start = i * self.hidden_dim
-            head_end = head_start + self.hidden_dim
-            qkv[:, head_start:head_end] = self.QK_heads[i](
-                value[:, :, :, i]
-            ).permute(0, 3, 4, 1, 2)
+            qkv[:, :, :, i, :, :] = self.QK_heads[i](
+                value[:, :, :, i, :, :]
+            )
 
+        qkv = qkv.view(bs, h, w, -1, self.out_len).permute(0, 3, 4, 1, 2)
         qkv = self.relu(self.norm1(qkv))
         x = self.conv(qkv)
         return x

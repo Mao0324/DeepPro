@@ -6,7 +6,56 @@ import math
 import random
 from skimage import measure
 from torch.utils.data import Dataset
-from data_utils.loader_utils import validate_frame_pairs
+from data_utils.loader_utils import (
+    SATVIDEO_V1_DATASET,
+    SATVIDEO_V1_TRAIN_MEAN,
+    SATVIDEO_V1_TRAIN_STD,
+    discover_split_sequences,
+    validate_frame_pairs,
+)
+
+
+class LazySequenceWindow:
+    """Store a temporal window without duplicating every frame path."""
+
+    __slots__ = (
+        'image_root',
+        'label_root',
+        'images',
+        'labels',
+        'start',
+        'end',
+    )
+
+    def __init__(
+        self,
+        image_root,
+        label_root,
+        images,
+        labels,
+        start,
+        end,
+    ):
+        self.image_root = image_root
+        self.label_root = label_root
+        self.images = images
+        self.labels = labels
+        self.start = start
+        self.end = end
+
+    def __len__(self):
+        return self.end - self.start
+
+    def __getitem__(self, index):
+        if index < 0:
+            index += len(self)
+        if index < 0 or index >= len(self):
+            raise IndexError(index)
+        frame_index = self.start + index
+        return (
+            os.path.join(self.image_root, self.images[frame_index]),
+            os.path.join(self.label_root, self.labels[frame_index]),
+        )
 
 
 class TrainSeqDataLoader(Dataset):
@@ -31,6 +80,10 @@ class TrainSeqDataLoader(Dataset):
         elif dataset == 'SatVideoIRSDT':
             self.train_mean = 111.47
             self.train_std = 22.43
+        elif dataset == SATVIDEO_V1_DATASET:
+            # Computed from every image in SatVideoIRSDT_v1/train.
+            self.train_mean = SATVIDEO_V1_TRAIN_MEAN
+            self.train_std = SATVIDEO_V1_TRAIN_STD
         elif dataset == 'IRSatVideo-LEO':
             self.train_mean = 72.104
             self.train_std = 12.303
@@ -47,6 +100,8 @@ class TrainSeqDataLoader(Dataset):
         # elif self.dataset == 'RGB-T':
         #     image = image.resize([480, 480])
         image = np.array(image, dtype=np.float32)
+        if image.ndim == 3:
+            image = image[:, :, 0]
         image = np.expand_dims(np.expand_dims(image, axis=0), axis=0)
 
         label = Image.open(label_path)
@@ -57,6 +112,8 @@ class TrainSeqDataLoader(Dataset):
         # elif self.dataset == 'RGB-T':
         #     label = label.resize([480, 480])
         label = np.array(label, dtype=np.float32) / 255.
+        if label.ndim == 3:
+            label = label[:, :, 0]
         label[label > 0] = 1.
         label = np.expand_dims(label, axis=0)
 
@@ -142,14 +199,22 @@ class TrainSeqDataLoader(Dataset):
 
 class TrainIRSeqDataLoader(TrainSeqDataLoader):
     def __init__(self, dataset='NUDT-MIRSDT', data_root='./datasets/IRSeq', seq_len=100, sample_rate=0.1, patch_size=None, transform=None):
-        if 'NUDT-MIRSDT' in dataset or dataset == 'RGB-T' or dataset == 'SatVideoIRSDT':
+        if dataset == SATVIDEO_V1_DATASET:
+            self.seq_list_file = None
+            seq_names = discover_split_sequences(data_root, 'train')
+        elif 'NUDT-MIRSDT' in dataset or dataset == 'RGB-T' or dataset == 'SatVideoIRSDT':
             self.seq_list_file = os.path.join(data_root, 'train.txt')
         elif dataset == 'IRDST-simulation':
             self.seq_list_file = os.path.join(data_root, 'img_idx/train_IRDST-simulation.txt')
         elif dataset == 'IRSatVideo-LEO':
             self.seq_list_file = os.path.join(data_root, 'annotations/train_sequences.txt')
-        self._check_preprocess()
-        seq_names = list(dict.fromkeys([x.split('/')[0] for x in self.ann_f]))
+        else:
+            raise ValueError('Unsupported training dataset: %s' % dataset)
+        if self.seq_list_file is not None:
+            self._check_preprocess()
+            seq_names = list(dict.fromkeys([
+                x.split('/')[0] for x in self.ann_f
+            ]))
 
         samplelist = []
         sample_p = []
@@ -171,7 +236,7 @@ class TrainIRSeqDataLoader(TrainSeqDataLoader):
                 label_root = os.path.join(data_root, 'segmentations', seq_name)
                 images = np.sort(os.listdir(image_root))
                 labels = np.sort(os.listdir(label_root))
-            if dataset == 'SatVideoIRSDT':
+            if dataset in ['SatVideoIRSDT', SATVIDEO_V1_DATASET]:
                 image_root = os.path.join(data_root, 'train', seq_name, 'img')
                 label_root = os.path.join(data_root, 'train', seq_name, 'mask')
                 images = np.sort(os.listdir(image_root))
@@ -183,17 +248,38 @@ class TrainIRSeqDataLoader(TrainSeqDataLoader):
                 images,
                 labels,
                 seq_name,
-                minimum_frames=seq_len,
+                minimum_frames=(
+                    1 if dataset == SATVIDEO_V1_DATASET else seq_len
+                ),
             )
 
             first_window_end = max(1, int(seq_len * 0.1))
             for window_end in range(first_window_end, len(images) + 1):
-                sample = [(os.path.join(image_root, images[x]), os.path.join(label_root, labels[x]))
-                          for x in range(max(0, window_end-seq_len), window_end)]
+                window_start = max(0, window_end - seq_len)
+                if dataset == SATVIDEO_V1_DATASET:
+                    sample = LazySequenceWindow(
+                        image_root,
+                        label_root,
+                        images,
+                        labels,
+                        window_start,
+                        window_end,
+                    )
+                else:
+                    sample = [
+                        (
+                            os.path.join(image_root, images[x]),
+                            os.path.join(label_root, labels[x]),
+                        )
+                        for x in range(window_start, window_end)
+                    ]
                 samplelist.extend([sample])
                 sample_p.append(len(sample))
 
-        sample_p = [p/sum(sample_p) for p in sample_p]
+        total_sample_weight = sum(sample_p)
+        if total_sample_weight <= 0:
+            raise ValueError('No valid training windows were generated.')
+        sample_p = [p / total_sample_weight for p in sample_p]
         super(TrainIRSeqDataLoader, self).__init__(dataset, data_root, samplelist, sample_p, seq_len, sample_rate, patch_size, transform)
 
     def _check_preprocess(self):

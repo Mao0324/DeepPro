@@ -1,0 +1,25 @@
+2026-07-20 15:17:32,879 - Model - INFO - PARAMETER ...
+2026-07-20 15:17:32,879 - Model - INFO - Namespace(accumulation_steps=4, amp=1, base_ckpt='', base_lr_mult=1.0, batch_size=4, brtd_adaptive_tdc=1, brtd_use_background=1, brtd_use_gate=1, brtd_zero_init=1, datapath='/home/user/4T_Storage/SJY/CSIG2026/datasets/NUDT-MIRSDT-Noise8.0_FJY', dataset='NUDT-MIRSDT-HiNo', decay_rate=0.0001, epoch=1, eval_amp=0, freeze_pretrained=1, gpu='0', gpu_num=1, learning_rate=0.001, log_dir='BRTD_cuda_debug', lr_decay=0.7, model='DeepPro-Plus_BRTD', optimizer='Adam', patch_size=128, run_test_after_train=1, sample_rate=0.1, savepath='./log/', seed=46, seqlen=40, spatial_ckpt='', st_ckpt='', step_size=10, swanlab_project='DeepPro', threshold_eval=0.5, use_swanlab=0)
+2026-07-20 15:17:33,866 - Model - INFO - The number of training data is: 776
+2026-07-20 15:17:33,866 - Model - INFO - The number of test data is: 20 sequences
+2026-07-20 15:17:34,379 - Model - INFO - No existing model or failed to load checkpoint: [Errno 2] No such file or directory: 'log/sem_seg/BRTD_cuda_debug/checkpoints/best_model.pth'
+2026-07-20 15:17:34,379 - Model - INFO - Starting training from scratch...
+2026-07-20 15:17:34,379 - Model - INFO - **** Epoch 1 (1/1) ****
+2026-07-20 15:17:34,379 - Model - INFO - Learning rate:0.001000
+2026-07-20 15:18:51,792 - Model - INFO - Training mean loss: 0.996608
+2026-07-20 15:18:51,793 - Model - INFO - Training accuracy (IoU) of prediction: 0.002905
+2026-07-20 15:18:51,826 - Model - INFO - Saved pre-evaluation checkpoint at log/sem_seg/BRTD_cuda_debug/checkpoints/latest_model.pth
+2026-07-20 15:18:51,826 - Model - INFO - Save model...
+2026-07-20 15:18:51,826 - Model - INFO - Saving at log/sem_seg/BRTD_cuda_debug/checkpoints/epoch_1_model.pth
+2026-07-20 15:18:51,845 - Model - INFO - Saving model....
+2026-07-20 15:18:51,926 - Model - INFO - ---- EPOCH 001 EVALUATION ----
+2026-07-20 16:04:08,671 - Model - INFO - PARAMETER ...
+2026-07-20 16:04:08,671 - Model - INFO - Namespace(accumulation_steps=1, amp=0, base_ckpt='', base_lr_mult=1.0, batch_size=4, brtd_adaptive_tdc=1, brtd_use_background=1, brtd_use_gate=1, brtd_zero_init=1, datapath='/home/user/4T_Storage/SJY/CSIG2026/datasets/NUDT-MIRSDT-Noise8.0_FJY', dataset='NUDT-MIRSDT-HiNo', decay_rate=0.0001, epoch=1, eval_amp=0, freeze_pretrained=1, gpu='0', gpu_num=1, learning_rate=0.001, log_dir='BRTD_cuda_debug', lr_decay=0.7, model='DeepPro-Plus_BRTD', optimizer='Adam', patch_size=128, run_test_after_train=1, sample_rate=0.1, savepath='./log/', seed=46, seqlen=40, spatial_ckpt='', st_ckpt='', step_size=10, swanlab_project='DeepPro', threshold_eval=0.5, use_swanlab=0)
+2026-07-20 16:04:09,687 - Model - INFO - The number of training data is: 776
+2026-07-20 16:04:09,687 - Model - INFO - The number of test data is: 20 sequences
+2026-07-20 16:04:10,259 - Model - INFO - Resume training from log/sem_seg/BRTD_cuda_debug/checkpoints/latest_model.pth
+2026-07-20 16:04:45,936 - Model - INFO - PARAMETER ...
+2026-07-20 16:04:45,936 - Model - INFO - Namespace(accumulation_steps=1, amp=0, base_ckpt='', base_lr_mult=1.0, batch_size=4, brtd_adaptive_tdc=1, brtd_use_background=1, brtd_use_gate=1, brtd_zero_init=1, datapath='/home/user/4T_Storage/SJY/CSIG2026/datasets/NUDT-MIRSDT-Noise8.0_FJY', dataset='NUDT-MIRSDT-HiNo', decay_rate=0.0001, epoch=1, eval_amp=0, freeze_pretrained=1, gpu='0', gpu_num=1, learning_rate=0.001, log_dir='BRTD_cuda_debug', lr_decay=0.7, model='DeepPro-Plus_BRTD', optimizer='Adam', patch_size=128, run_test_after_train=1, sample_rate=0.1, savepath='./log/', seed=46, seqlen=40, spatial_ckpt='', st_ckpt='', step_size=10, swanlab_project='DeepPro', threshold_eval=0.5, use_swanlab=0)
+2026-07-20 16:04:46,928 - Model - INFO - The number of training data is: 776
+2026-07-20 16:04:46,928 - Model - INFO - The number of test data is: 20 sequences
+2026-07-20 16:04:47,498 - Model - INFO - Resume training from log/sem_seg/BRTD_cuda_debug/checkpoints/latest_model.pth
