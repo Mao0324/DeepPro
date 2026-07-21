@@ -141,9 +141,17 @@ def main(args):
     print("start loading test data ...")
     TEST_DATASET  = TestIRSeqDataLoader(args.dataset, data_root=root,  seq_len=SEQ_LEN, cat_len=int(SEQ_LEN*0.1), transform=None)
 
-    trainDataLoader = torch.utils.data.DataLoader(TRAIN_DATASET, batch_size=BATCH_SIZE, shuffle=True, 
-                                                  num_workers=4, pin_memory=True, drop_last=True,
-                                                  worker_init_fn=lambda x: np.random.seed(x + int(time.time())))
+    trainDataLoader = torch.utils.data.DataLoader(
+        TRAIN_DATASET,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=1,
+        drop_last=True,
+        worker_init_fn=lambda x: np.random.seed(x + int(time.time()))
+    )
 
     log_string("The number of training data is: %d" % len(TRAIN_DATASET))
     log_string("The number of test data is: %d sequences" % len(TEST_DATASET))
@@ -221,7 +229,8 @@ def main(args):
         for i, (images, targets) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
             optimizer.zero_grad()
             #torch.autograd.set_detect_anomaly = True
-            images, targets = images.float().cuda(), targets.float().cuda()
+            images = images.float().cuda(non_blocking=True)
+            targets = targets.float().cuda(non_blocking=True)
 
             _, seq_midpred = detector(images)
 
@@ -279,7 +288,13 @@ def main(args):
             for seq_idx, seq_dataset in tqdm(enumerate(TEST_DATASET), total=len(TEST_DATASET), smoothing=0.9):
                 # if seq_idx % 3 > 0:
                 #     continue
-                seq_dataloader = torch.utils.data.DataLoader(seq_dataset, batch_size=1, shuffle=False)
+                seq_dataloader = torch.utils.data.DataLoader(
+                    seq_dataset,
+                    batch_size=1,
+                    shuffle=False,
+                    num_workers=0,
+                    pin_memory=False,
+                )
                 num_batches += len(seq_dataloader)
                 for i, (images, targets, _, first_end) in enumerate(seq_dataloader):
                     images, targets = images.float().cuda(), targets.float().cuda()
