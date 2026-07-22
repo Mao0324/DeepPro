@@ -57,6 +57,25 @@ def multiprocessing_loader_options(worker_count, prefetch_factor):
     return options
 
 
+def binary_segmentation_metrics(
+    true_positive,
+    predicted_positive,
+    target_positive,
+):
+    """Return micro-averaged pixel IoU, precision, recall and F1."""
+    true_positive = true_positive.to(torch.float64)
+    predicted_positive = predicted_positive.to(torch.float64)
+    target_positive = target_positive.to(torch.float64)
+    union = predicted_positive + target_positive - true_positive
+    metrics = torch.stack((
+        true_positive / union.clamp_min(1),
+        true_positive / predicted_positive.clamp_min(1),
+        true_positive / target_positive.clamp_min(1),
+        2 * true_positive / (predicted_positive + target_positive).clamp_min(1),
+    ))
+    return tuple(metrics.tolist())
+
+
 def parse_args():
     parser = argparse.ArgumentParser('Model')
     parser.add_argument('--model', type=str, default='DeepPro-Plus', help='model name [default: pointnet_sem_seg]')
@@ -288,10 +307,13 @@ def main(args):
             param_group['lr'] = lr
         num_batches = len(trainDataLoader)
         metric_device = next(detector.parameters()).device
-        total_intersection_mid = torch.zeros(
+        total_true_positive_mid = torch.zeros(
             (), device=metric_device, dtype=torch.int64
         )
-        total_union_mid = torch.zeros(
+        total_predicted_positive_mid = torch.zeros(
+            (), device=metric_device, dtype=torch.int64
+        )
+        total_target_positive_mid = torch.zeros(
             (), device=metric_device, dtype=torch.int64
         )
         loss_sum = torch.zeros(
@@ -302,6 +324,7 @@ def main(args):
         for i, (images, targets) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
             optimizer.zero_grad(set_to_none=True)
             #torch.autograd.set_detect_anomaly = True
+            torch.autograd.set_detect_anomaly(True)
             images = images.float().cuda(non_blocking=True)
             targets = targets.float().cuda(non_blocking=True)
 
@@ -316,14 +339,16 @@ def main(args):
                     args.threshold_eval
                 )
                 batch_label = targets.gt(0)
-                total_intersection_mid += torch.logical_and(
+                total_true_positive_mid += torch.logical_and(
                     midpred_choice,
                     batch_label,
                 ).sum(dtype=torch.int64)
-                total_union_mid += torch.logical_or(
-                    midpred_choice,
-                    batch_label,
-                ).sum(dtype=torch.int64)
+                total_predicted_positive_mid += midpred_choice.sum(
+                    dtype=torch.int64
+                )
+                total_target_positive_mid += batch_label.sum(
+                    dtype=torch.int64
+                )
                 loss_sum += loss.detach().to(torch.float64)
             # break
 
@@ -331,22 +356,32 @@ def main(args):
         # throughout validation because Python blocks do not create a scope.
         optimizer.zero_grad(set_to_none=True)
         train_loss = (loss_sum / num_batches).item()
-        train_iou = (
-            total_intersection_mid.to(torch.float64)
-            / total_union_mid.to(torch.float64)
-        ).item()
+        train_iou, train_precision, train_recall, train_f1 = (
+            binary_segmentation_metrics(
+                total_true_positive_mid,
+                total_predicted_positive_mid,
+                total_target_positive_mid,
+            )
+        )
 
         del images, targets, seq_midpred, loss
         del midpred_choice, batch_label
-        del total_intersection_mid, total_union_mid, loss_sum
+        del total_true_positive_mid
+        del total_predicted_positive_mid, total_target_positive_mid, loss_sum
         release_cuda_memory('training cleanup')
 
         log_string('Training mean loss: %f' % train_loss)
         log_string('Training accuracy (IoU) of prediction: %f' % train_iou)
+        log_string('Training pixel precision: %f' % train_precision)
+        log_string('Training pixel recall: %f' % train_recall)
+        log_string('Training pixel F1: %f' % train_f1)
         if swanlab_run is not None:
             swanlab.log({
                 'train/loss': train_loss,
                 'train/iou': train_iou,
+                'train/precision': train_precision,
+                'train/recall': train_recall,
+                'train/f1': train_f1,
                 'train/lr': lr,
             }, step=epoch + 1)
 
@@ -373,10 +408,13 @@ def main(args):
         '''Evaluate'''
         with torch.inference_mode():
             num_batches = len(validationDataLoader)
-            total_intersection_mid = torch.zeros(
+            total_true_positive_mid = torch.zeros(
                 (), device=metric_device, dtype=torch.int64
             )
-            total_union_mid = torch.zeros(
+            total_predicted_positive_mid = torch.zeros(
+                (), device=metric_device, dtype=torch.int64
+            )
+            total_target_positive_mid = torch.zeros(
                 (), device=metric_device, dtype=torch.int64
             )
             loss_g_sum = torch.zeros(
@@ -405,25 +443,35 @@ def main(args):
                     args.threshold_eval
                 )
                 batch_label = targets.gt(0)
-                total_intersection_mid += torch.logical_and(
+                total_true_positive_mid += torch.logical_and(
                     pred_choice_mid,
                     batch_label,
                 ).sum(dtype=torch.int64)
-                total_union_mid += torch.logical_or(
-                    pred_choice_mid,
-                    batch_label,
-                ).sum(dtype=torch.int64)
+                total_predicted_positive_mid += pred_choice_mid.sum(
+                    dtype=torch.int64
+                )
+                total_target_positive_mid += batch_label.sum(
+                    dtype=torch.int64
+                )
 
-            mIoU_mid = (
-                total_intersection_mid.to(torch.float64)
-                / total_union_mid.to(torch.float64)
-            ).item()
+            mIoU_mid, eval_precision, eval_recall, eval_f1 = (
+                binary_segmentation_metrics(
+                    total_true_positive_mid,
+                    total_predicted_positive_mid,
+                    total_target_positive_mid,
+                )
+            )
             eval_loss = (loss_g_sum / num_batches).item()
             del images, targets, seq_midpred
             del pred_choice_mid, batch_label
-            del total_intersection_mid, total_union_mid, loss_g_sum
+            del total_true_positive_mid
+            del total_predicted_positive_mid, total_target_positive_mid
+            del loss_g_sum
             log_string('Eval mean loss: %f' % eval_loss)
             log_string('Eval avg class IoU of prediction: %f' % (mIoU_mid))
+            log_string('Eval pixel precision: %f' % eval_precision)
+            log_string('Eval pixel recall: %f' % eval_recall)
+            log_string('Eval pixel F1: %f' % eval_f1)
 
             if mIoU_mid >= best_iou:
                 best_iou = mIoU_mid
@@ -452,6 +500,9 @@ def main(args):
                 swanlab.log({
                     'eval/loss': eval_loss,
                     'eval/iou': mIoU_mid,
+                    'eval/precision': eval_precision,
+                    'eval/recall': eval_recall,
+                    'eval/f1': eval_f1,
                     'eval/best_iou': best_iou,
                 }, step=epoch + 1)
 

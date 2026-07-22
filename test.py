@@ -150,6 +150,8 @@ def main(args):
         num_batches = 0
         total_intersection_mid = 0
         total_union_mid = 0
+        total_predicted_positive_mid = 0
+        total_target_positive_mid = 0
 
         Th_Seg = np.array([0, 1e-20, 1e-10, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0.2, 0.3, .35, 0.4,
                            .45, 0.5, .55, 0.6, .65, 0.7, 0.8, 0.85, 0.9, 0.95, 0.99, 1])
@@ -213,6 +215,8 @@ def main(args):
                     batch_label     = targets_all.numpy()
                     total_intersection_mid += np.sum(pred_choice_mid * batch_label)
                     total_union_mid += ((pred_choice_mid + batch_label) > 0).astype(np.float32).sum()
+                    total_predicted_positive_mid += np.sum(pred_choice_mid)
+                    total_target_positive_mid += np.sum(batch_label)
 
                 ############### for Pd&Fa ###############
                 _, t, h, w = seq_midpred_all.size()
@@ -289,6 +293,19 @@ def main(args):
             else:
                 writeMIRST_ROC(FalseNumAll, TrueNumAll, TgtNumAll, pixelsNumber, total_intersection_mid,
                                total_union_mid, Th_Seg, TEST_DATASET, log_string)
+            pixel_precision = total_intersection_mid / max(
+                total_predicted_positive_mid, 1
+            )
+            pixel_recall = total_intersection_mid / max(
+                total_target_positive_mid, 1
+            )
+            pixel_f1 = 2 * total_intersection_mid / max(
+                total_predicted_positive_mid + total_target_positive_mid,
+                1,
+            )
+            log_string('Eval pixel precision: %f' % pixel_precision)
+            log_string('Eval pixel recall: %f' % pixel_recall)
+            log_string('Eval pixel F1: %f' % pixel_f1)
 
         if not args.output_only:
             flops, params = profile(detector, inputs=(torch.randn(1, 1, args.seqlen, 200, 300).cuda(),))
