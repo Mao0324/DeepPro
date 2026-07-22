@@ -7,6 +7,12 @@ import gc
 import os
 from data_utils.TrainDataLoader import TrainIRSeqDataLoader
 from data_utils.TestDataLoader import TestIRSeqDataLoader
+from networks.losses import (
+    LOSS_DESCRIPTIONS,
+    LOSS_NAMES,
+    build_segmentation_loss,
+    loss_experiment_name,
+)
 import torch
 import datetime
 import logging
@@ -98,6 +104,52 @@ def parse_args():
                                                                      '0.03(IRDST), 0.05(RGB-T), 0.04(SatVideoIRSDT)]')
     parser.add_argument('--lr_decay', type=float, default=0.7, help='Decay rate for lr decay [default: 0.7]')
     parser.add_argument('--threshold_eval', type=float, default=0.5, help='Threshold in evaluation [default: 0.5]')
+    parser.add_argument(
+        '--loss',
+        type=str,
+        default='soft_iou',
+        choices=LOSS_NAMES,
+        help='Training loss. Default soft_iou exactly preserves the old behavior.soft_iou，' \
+        'frame_soft_iou，bce，focal，dice，bce_dice，tversky，focal_tversky，lovasz，sls_iou，tda_sls,hard_focal,tversky_hard_focal,stc_f1',
+    )
+    parser.add_argument('--loss_eps', type=float, default=1.0,
+                        help='Smoothing for Dice/Tversky/frame SoftIoU [default: 1.0]')
+    parser.add_argument('--sls_eps', type=float, default=1e-6,
+                        help='Numerical epsilon for SLS/TDA [default: 1e-6]')
+    parser.add_argument('--focal_alpha', type=float, default=0.75,
+                        help='Positive-class weight for Focal losses [default: 0.75]')
+    parser.add_argument('--focal_gamma', type=float, default=2.0,
+                        help='Focusing exponent for Focal losses [default: 2.0]')
+    parser.add_argument('--tversky_fp_weight', type=float, default=0.6,
+                        help='False-positive weight in Tversky [default: 0.6]')
+    parser.add_argument('--tversky_fn_weight', type=float, default=0.4,
+                        help='False-negative weight in Tversky [default: 0.4]')
+    parser.add_argument('--tversky_gamma', type=float, default=1.33,
+                        help='Focal-Tversky exponent [default: 1.33]')
+    parser.add_argument('--bce_weight', type=float, default=0.5,
+                        help='BCE fraction in bce_dice [default: 0.5]')
+    parser.add_argument('--hard_negative_topk', type=int, default=4096,
+                        help='Hard background pixels retained per video clip [default: 4096]')
+    parser.add_argument('--hard_focal_weight', type=float, default=0.25,
+                        help='Hard-Focal coefficient in combined losses [default: 0.25]')
+    parser.add_argument('--sls_location_weight', type=float, default=1.0,
+                        help='Location coefficient in SLS/TDA [default: 1.0]')
+    parser.add_argument('--sls_warmup_epochs', type=int, default=5,
+                        help='Epochs before enabling SLS location term [default: 5]')
+    parser.add_argument('--tda_weight', type=float, default=0.2,
+                        help='Local TDA coefficient in tda_sls [default: 0.2]')
+    parser.add_argument('--tda_mean_size', type=float, default=0.0,
+                        help='Dataset mean target area; 0 uses current batch [default: 0]')
+    parser.add_argument('--tda_mean_contrast', type=float, default=0.0,
+                        help='Dataset mean local contrast; 0 uses current batch [default: 0]')
+    parser.add_argument('--tda_dilation', type=int, default=3,
+                        help='TDA object-box dilation in pixels [default: 3]')
+    parser.add_argument('--stc_center_weight', type=float, default=0.1,
+                        help='Center-response coefficient in stc_f1 [default: 0.1]')
+    parser.add_argument('--stc_temporal_weight', type=float, default=0.05,
+                        help='Temporal-consistency coefficient in stc_f1 [default: 0.05]')
+    parser.add_argument('--stc_warmup_epochs', type=int, default=5,
+                        help='Epochs before enabling STC auxiliary terms [default: 5]')
     parser.add_argument('--train_workers', type=int, default=8,
                         help='Persistent DataLoader workers used for training [default: 8]')
     parser.add_argument('--val_workers', type=int, default=4,
@@ -157,7 +209,11 @@ def main(args):
     experiment_dir = experiment_dir.joinpath('sem_seg')
     experiment_dir.mkdir(exist_ok=True)
     if args.log_dir is None:
-        args.log_dir = args.dataset + '__' + timestr + '__SoftLoUloss_' + args.model + '_DataL' + str(args.seqlen)
+        args.log_dir = (
+            args.dataset + '__' + timestr + '__'
+            + loss_experiment_name(args.loss) + '_'
+            + args.model + '_DataL' + str(args.seqlen)
+        )
         experiment_dir = experiment_dir.joinpath(args.log_dir)
     else:
         experiment_dir = experiment_dir.joinpath(args.log_dir)
@@ -238,6 +294,10 @@ def main(args):
     '''MODEL LOADING'''
     MODEL = importlib.import_module(args.model)
     shutil.copy('networks/models/%s.py' % args.model, str(experiment_dir))
+    shutil.copy(
+        'networks/losses/segmentation_losses.py',
+        str(experiment_dir),
+    )
 
     if "TDCSTA" in args.model:
         detector = MODEL.detector(
@@ -253,9 +313,34 @@ def main(args):
     if args.gpu_num > 1:
         detector = torch.nn.DataParallel(detector)#, device_ids=list(np.arange(args.gpu_num)))
     detector = detector.cuda()
-    # criterion = MODEL.bceloss().cuda()
-    # criterion = MODEL.HAMloss().cuda()
-    criterion = MODEL.SoftLoUloss().cuda()
+    criterion = build_segmentation_loss(
+        args.loss,
+        eps=args.loss_eps,
+        sls_eps=args.sls_eps,
+        focal_alpha=args.focal_alpha,
+        focal_gamma=args.focal_gamma,
+        tversky_fp_weight=args.tversky_fp_weight,
+        tversky_fn_weight=args.tversky_fn_weight,
+        tversky_gamma=args.tversky_gamma,
+        bce_weight=args.bce_weight,
+        hard_negative_topk=args.hard_negative_topk,
+        hard_focal_weight=args.hard_focal_weight,
+        sls_location_weight=args.sls_location_weight,
+        sls_warmup_epochs=args.sls_warmup_epochs,
+        tda_weight=args.tda_weight,
+        tda_mean_size=args.tda_mean_size,
+        tda_mean_contrast=args.tda_mean_contrast,
+        tda_dilation=args.tda_dilation,
+        stc_center_weight=args.stc_center_weight,
+        stc_temporal_weight=args.stc_temporal_weight,
+        stc_warmup_epochs=args.stc_warmup_epochs,
+    ).cuda()
+    log_string('Loss: %s - %s' % (args.loss, LOSS_DESCRIPTIONS[args.loss]))
+    if getattr(criterion, 'requires_images', False):
+        log_string(
+            'WARNING: %s performs CPU connected-component extraction and '
+            'will be slower than GPU-only losses.' % args.loss
+        )
 
     if args.optimizer == 'Adam':
         optimizer = torch.optim.Adam(
@@ -323,14 +408,20 @@ def main(args):
 
         for i, (images, targets) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
             optimizer.zero_grad(set_to_none=True)
-            #torch.autograd.set_detect_anomaly = True
-            torch.autograd.set_detect_anomaly(True)
+            # For debugging NaN/invalid gradients only; enabling anomaly
+            # detection here forces extra synchronization every batch.
+            # torch.autograd.set_detect_anomaly(True)
             images = images.float().cuda(non_blocking=True)
             targets = targets.float().cuda(non_blocking=True)
 
             _, seq_midpred = detector(images)
 
-            loss = criterion(seq_midpred, targets)
+            loss = criterion(
+                seq_midpred,
+                targets,
+                images=images,
+                epoch=epoch,
+            )
             loss.backward()
             optimizer.step()
 
@@ -438,7 +529,12 @@ def main(args):
                         size=targets.shape[-2:],
                     )
 
-                loss_g_sum += criterion(seq_midpred, targets).to(torch.float64)
+                loss_g_sum += criterion(
+                    seq_midpred,
+                    targets,
+                    images=images,
+                    epoch=epoch,
+                ).to(torch.float64)
                 pred_choice_mid = torch.sigmoid(seq_midpred).gt(
                     args.threshold_eval
                 )
