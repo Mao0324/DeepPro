@@ -3,6 +3,7 @@ Author: Benny
 Date: Nov 2019
 """
 import argparse
+import gc
 import os
 from data_utils.TrainDataLoader import TrainIRSeqDataLoader
 from data_utils.TestDataLoader import TestIRSeqDataLoader
@@ -80,6 +81,28 @@ def main(args):
     def log_string(str):
         logger.info(str)
         print(str)
+
+    def release_cuda_memory(stage):
+        """Release unreferenced CUDA blocks at train/eval phase boundaries."""
+        gc.collect()
+        if not torch.cuda.is_available():
+            return
+        for device_id in range(torch.cuda.device_count()):
+            with torch.cuda.device(device_id):
+                torch.cuda.synchronize()
+                torch.cuda.empty_cache()
+        allocated = sum(
+            torch.cuda.memory_allocated(device_id)
+            for device_id in range(torch.cuda.device_count())
+        ) / (1024 ** 3)
+        reserved = sum(
+            torch.cuda.memory_reserved(device_id)
+            for device_id in range(torch.cuda.device_count())
+        ) / (1024 ** 3)
+        log_string(
+            'CUDA memory after %s: allocated=%.3f GiB, reserved=%.3f GiB'
+            % (stage, allocated, reserved)
+        )
 
     '''HYPER PARAMETER'''
     if args.gpu_num == 1:
@@ -194,6 +217,7 @@ def main(args):
         )
 
     best_iou = 0
+    checkpoint = None
     try:
         checkpoint = torch.load(str(experiment_dir) + '/checkpoints/best_model.pth')
         start_epoch = checkpoint['epoch'] + 1
@@ -208,6 +232,11 @@ def main(args):
         log_string('No existing model or failed to load checkpoint: %s' % e)
         log_string('Starting training from scratch...')
         start_epoch = 0
+
+    # load_state_dict copies checkpoint values into the live model/optimizer;
+    # retaining the source dictionary would keep a duplicate set of tensors.
+    del checkpoint
+    release_cuda_memory('checkpoint loading')
 
 
     LEARNING_RATE_CLIP = 1e-5
@@ -227,7 +256,7 @@ def main(args):
         detector.train()
 
         for i, (images, targets) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             #torch.autograd.set_detect_anomaly = True
             images = images.float().cuda(non_blocking=True)
             targets = targets.float().cuda(non_blocking=True)
@@ -238,13 +267,21 @@ def main(args):
             loss.backward()
             optimizer.step()
 
-            seq_midpred = torch.sigmoid(seq_midpred)
+            seq_midpred = torch.sigmoid(seq_midpred.detach())
             midpred_choice = (seq_midpred.cpu().data.numpy() > args.threshold_eval) * 1.
             batch_label    = targets.cpu().data.numpy()
             total_intersection_mid += np.sum(midpred_choice * batch_label)
             total_union_mid += ((midpred_choice + batch_label)>0).astype(np.float32).sum()
             loss_sum += loss.item()
             # break
+
+        # The last training batch and its gradients otherwise remain alive
+        # throughout validation because Python blocks do not create a scope.
+        optimizer.zero_grad(set_to_none=True)
+        del images, targets, seq_midpred, loss
+        del midpred_choice, batch_label
+        release_cuda_memory('training cleanup')
+
         train_loss = loss_sum / num_batches
         train_iou = total_intersection_mid / total_union_mid
         log_string('Training mean loss: %f' % train_loss)
@@ -273,15 +310,16 @@ def main(args):
                     'optimizer_state_dict': optimizer.state_dict(),
                 }
             torch.save(state, savepath)
+            del state
             log_string('Saving model....')
 
         '''Evaluate'''
-        with torch.no_grad():
+        with torch.inference_mode():
             num_batches = 0
             total_intersection_mid = 0
             total_union_mid = 0
             loss_g_sum = 0
-            detector = detector.eval()
+            detector.eval()
 
             log_string('---- EPOCH %03d EVALUATION ----' % (global_epoch + 1))
             # for i, (images, targets) in tqdm(enumerate(testDataLoader), total=len(testDataLoader), smoothing=0.9):
@@ -311,6 +349,12 @@ def main(args):
                     total_intersection_mid += np.sum(pred_choice_mid * batch_label)
                     total_union_mid += ((pred_choice_mid + batch_label) > 0).astype(np.float32).sum()
 
+                # Do not retain the last, potentially full-resolution, batch
+                # while constructing the next sequence loader.
+                del images, targets, seq_midpred
+                del pred_choice_mid, batch_label
+                del seq_dataloader
+
             mIoU_mid = total_intersection_mid / total_union_mid
             eval_loss = loss_g_sum / float(num_batches)
             log_string('Eval mean loss: %f' % eval_loss)
@@ -336,6 +380,7 @@ def main(args):
                         'optimizer_state_dict': optimizer.state_dict(),
                     }
                 torch.save(state, savepath)
+                del state
                 log_string('Saving model....')
             log_string('Best mIoU_mid: %f' % best_iou)
             if swanlab_run is not None:
@@ -345,10 +390,18 @@ def main(args):
                     'eval/best_iou': best_iou,
                 }, step=epoch + 1)
 
+        release_cuda_memory('evaluation cleanup')
         global_epoch += 1
 
     if swanlab_run is not None and hasattr(swanlab, 'finish'):
         swanlab.finish()
+
+    # main() is followed by a separate test.py process. Explicit teardown is
+    # required so the parent process does not keep CUDA cache while the child
+    # allocates its own model and inputs.
+    del trainDataLoader
+    del detector, criterion, optimizer
+    release_cuda_memory('training shutdown')
 
 
 def path_remake(path):
