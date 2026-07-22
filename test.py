@@ -21,6 +21,10 @@ from ShootingRules import ShootingRules
 from sklearn.metrics import auc
 from collections import OrderedDict
 from thop import profile, clever_format
+from tools_forSatVideoIRSTD.seg2centroid_txt import (
+    calculate_centroids,
+    format_centroid_line,
+)
 # from attribution.core import IR_Integrated_gradient, MeanLinearPath, ZeroLinearPath
 from write_results import writeNUDTMIRSDT_ROC, writeMIRST_ROC
 
@@ -41,6 +45,18 @@ def parse_args():
     parser.add_argument('--log_dir', type=str, default='NUDT-MIRSDT__2024-12-28_16-21__SoftLoUloss_DeepPro-Plus_DataL40', help='experiment root')
     parser.add_argument('--logpath', type=str, default='./log/', help='Log path: ./log/')
     parser.add_argument('--visual', action='store_true', default=False, help='visualize result [default: False]')
+    parser.add_argument('--visual_count', type=int, default=0,
+                        help='Randomly save this many prediction masks; 0 saves all when --visual is set')
+    parser.add_argument('--visual_seed', type=int, default=46,
+                        help='Random seed used by --visual_count')
+    parser.add_argument('--centroid_txt', action='store_true', default=False,
+                        help='Write one centroid TXT file for every validation sequence')
+    parser.add_argument('--centroid_threshold', type=float, default=0.5,
+                        help='Probability threshold used to produce centroid TXT files')
+    parser.add_argument('--centroid_dir', type=str, default=None,
+                        help='Centroid TXT output directory; defaults to <experiment>/out_centroid')
+    parser.add_argument('--output_only', action='store_true', default=False,
+                        help='Skip IoU, Pd/Fa and FLOPs; only create requested output files')
     parser.add_argument('--threshold_eval', type=float, default=0.5, help='Threshold in evaluation [default: 0.5]')
     parser.add_argument('--attribution', action='store_true', default=False, help='This test is attribution analysis or not')
     return parser.parse_args()
@@ -57,12 +73,34 @@ def main(args):
         print(str)
 
     '''HYPER PARAMETER'''
+    if args.visual_count < 0:
+        raise ValueError('visual_count must be non-negative.')
+    if not 0 <= args.centroid_threshold <= 1:
+        raise ValueError('centroid_threshold must be between 0 and 1.')
+
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
     experiment_dir = args.logpath + 'sem_seg/' + args.log_dir
     if args.visual:
-        visual_dir = experiment_dir + '/visual/'
-        visual_dir = Path(visual_dir)
-        visual_dir.mkdir(exist_ok=True)
+        if args.visual_count > 0:
+            visual_name = 'visual_random_%d_seed%d' % (
+                args.visual_count,
+                args.visual_seed,
+            )
+        else:
+            visual_name = 'visual'
+        visual_dir = Path(experiment_dir) / visual_name
+        if args.visual_count > 0 and visual_dir.exists() and any(visual_dir.iterdir()):
+            raise FileExistsError(
+                'Random visualization directory is not empty: %s. '
+                'Rename/remove it or choose another --visual_seed.' % visual_dir
+            )
+        visual_dir.mkdir(parents=True, exist_ok=True)
+        visual_rng = np.random.default_rng(args.visual_seed)
+        visual_reservoir = []
+        visual_seen = 0
+    if args.centroid_txt:
+        centroid_dir = Path(args.centroid_dir) if args.centroid_dir else Path(experiment_dir) / 'out_centroid'
+        centroid_dir.mkdir(parents=True, exist_ok=True)
 
     '''LOG'''
     logger = logging.getLogger("Model")
@@ -106,7 +144,7 @@ def main(args):
     # ## ##########################################
     detector.load_state_dict(checkpoint['model_state_dict'])
     detector.eval()
-    eval = ShootingRules()
+    eval = None if args.output_only else ShootingRules()
 
     with torch.no_grad():
         num_batches = 0
@@ -133,7 +171,9 @@ def main(args):
             seq_midpred_all = []   ## b, t, h, w
             targets_all     = []
             for i, (images, targets, centroids, first_end) in enumerate(seq_dataloader):
-                images, targets = images.float().cuda(), targets.float().cuda()
+                images = images.float().cuda()
+                if not args.output_only:
+                    targets = targets.float().cuda()
                 first_frame, end_frame = first_end
 
                 if args.attribution:
@@ -145,58 +185,104 @@ def main(args):
                 else:
                     _, seq_midpred = detector(images)   ## b, t, h, w
                     seq_midpred = torch.sigmoid(seq_midpred).data.cpu()
-                    targets = targets.data.cpu()
+                    if not args.output_only:
+                        targets = targets.data.cpu()
 
                     if i == 0:
                         seq_midpred_all = seq_midpred
-                        targets_all     = targets
                         centroids_all   = centroids
+                        if not args.output_only:
+                            targets_all = targets
                     else:
                         seq_midpred_all[:, first_frame:last_end+1, :, :] = torch.maximum(seq_midpred_all[:, first_frame:, :, :],
                                                                                          seq_midpred[:, :last_end-first_frame+1, :, :])
                         seq_midpred_all = torch.cat([seq_midpred_all, seq_midpred[:, last_end-first_frame+1:, :, :]], dim=1)
-                        targets_all     = torch.cat([targets_all, targets[:, last_end-first_frame+1:, :, :]], dim=1)
                         centroids_all   = torch.cat([centroids_all, centroids[:, last_end-first_frame+1:, :, :]], dim=1)
+                        if not args.output_only:
+                            targets_all = torch.cat([targets_all, targets[:, last_end-first_frame+1:, :, :]], dim=1)
 
                     last_first = first_frame
                     last_end = end_frame
 
             if not args.attribution:
-                ############### for IoU ###############
-                pred_choice_mid = (seq_midpred_all.numpy() > args.threshold_eval) * 1.
-                batch_label     = targets_all.numpy()
-                total_intersection_mid += np.sum(pred_choice_mid * batch_label)
-                total_union_mid += ((pred_choice_mid + batch_label) > 0).astype(np.float32).sum()
+                seq_name = TEST_DATASET.seq_names[seq_idx]
+                centroid_lines = []
+                if not args.output_only:
+                    ############### for IoU ###############
+                    pred_choice_mid = (seq_midpred_all.numpy() > args.threshold_eval) * 1.
+                    batch_label     = targets_all.numpy()
+                    total_intersection_mid += np.sum(pred_choice_mid * batch_label)
+                    total_union_mid += ((pred_choice_mid + batch_label) > 0).astype(np.float32).sum()
 
                 ############### for Pd&Fa ###############
                 _, t, h, w = seq_midpred_all.size()
-                pixelsNumber[seq_idx] += t * h * w
+                if not args.output_only:
+                    pixelsNumber[seq_idx] += t * h * w
                 for ti in range(t):
                     midpred_ti = seq_midpred_all[:, ti, :, :].numpy().copy()
                     centroid_ti  = centroids_all[:, ti, :, :].numpy().copy()
                     if midpred_ti.shape[-1] != centroid_ti.shape[-1]:
                         h, w = centroid_ti.shape[-2:]
                         midpred_ti = cv2.resize(midpred_ti[0, :, :], (w, h))[None, :, :]
-                    for th_i in range(len(Th_Seg)):
-                        FalseNum, TrueNum, TgtNum = eval(midpred_ti, centroid_ti, Th_Seg[th_i])
-                        FalseNumAll[seq_idx, th_i] = FalseNumAll[seq_idx, th_i] + FalseNum
-                        TrueNumAll[seq_idx, th_i]  = TrueNumAll[seq_idx, th_i] + TrueNum
-                        TgtNumAll[seq_idx, th_i]   = TgtNumAll[seq_idx, th_i] + TgtNum
+                    if not args.output_only:
+                        for th_i in range(len(Th_Seg)):
+                            FalseNum, TrueNum, TgtNum = eval(midpred_ti, centroid_ti, Th_Seg[th_i])
+                            FalseNumAll[seq_idx, th_i] = FalseNumAll[seq_idx, th_i] + FalseNum
+                            TrueNumAll[seq_idx, th_i]  = TrueNumAll[seq_idx, th_i] + TrueNum
+                            TgtNumAll[seq_idx, th_i]   = TgtNumAll[seq_idx, th_i] + TgtNum
 
                     ############### save results ###############
+                    plus1 = 0 if args.dataset == 'RGB-T' else 1
+                    frame_idx = ti + plus1
+                    png_name = '%05d.png' % frame_idx
+
+                    if args.centroid_txt:
+                        binary_mask = np.uint8(
+                            midpred_ti.squeeze(0) > args.centroid_threshold
+                        ) * 255
+                        frame_centroids = calculate_centroids(binary_mask)
+                        centroid_lines.append(
+                            format_centroid_line(frame_idx, frame_centroids)
+                        )
+
                     if args.visual:
-                        midpred_ti_png = Image.fromarray(uint8(midpred_ti.squeeze(0) * 255))
-                        plus1 = 0 if args.dataset == 'RGB-T' else 1
-                        png_name = '%05d.png' % (ti+1*plus1)
-                        seq_dir = Path(os.path.join(visual_dir, TEST_DATASET.seq_names[seq_idx]))
-                        seq_dir.mkdir(exist_ok=True)
-                        midpred_ti_png.save(os.path.join(seq_dir, png_name))
-                        # scio.savemat(os.path.join(seq_dir, '%05d.mat' % (ti+1*plus1)), {'TestOut': midpred_ti.squeeze(0)})
+                        visual_array = np.uint8(midpred_ti.squeeze(0) * 255)
+                        visual_item = (seq_name, png_name, visual_array)
+                        visual_seen += 1
+                        if args.visual_count == 0:
+                            seq_dir = visual_dir / seq_name
+                            seq_dir.mkdir(parents=True, exist_ok=True)
+                            Image.fromarray(visual_array).save(seq_dir / png_name)
+                        elif len(visual_reservoir) < args.visual_count:
+                            visual_reservoir.append(visual_item)
+                        else:
+                            replace_idx = int(visual_rng.integers(0, visual_seen))
+                            if replace_idx < args.visual_count:
+                                visual_reservoir[replace_idx] = visual_item
+                        # scio.savemat(os.path.join(seq_dir, '%05d.mat' % frame_idx), {'TestOut': midpred_ti.squeeze(0)})
+
+                if args.centroid_txt:
+                    output_txt = centroid_dir / ('%s.txt' % seq_name)
+                    with output_txt.open('w') as output_file:
+                        output_file.write('\n'.join(centroid_lines))
+                        output_file.write('\n')
+
+        if args.visual and args.visual_count > 0:
+            for seq_name, png_name, visual_array in visual_reservoir:
+                seq_dir = visual_dir / seq_name
+                seq_dir.mkdir(parents=True, exist_ok=True)
+                Image.fromarray(visual_array).save(seq_dir / png_name)
+            log_string(
+                'Saved %d randomly sampled visualizations from %d frames.'
+                % (len(visual_reservoir), visual_seen)
+            )
+        if args.centroid_txt:
+            log_string('Centroid TXT files saved to %s.' % centroid_dir)
 
         time_end = time.time()
         # print('FPS=%.3f' % (2000*1.2 / (time_end - time_start)))
         ############### log Pd&Fa results ###############
-        if not args.attribution:
+        if not args.attribution and not args.output_only:
             if 'NUDT-MIRSDT' in args.dataset:
                 writeNUDTMIRSDT_ROC(FalseNumAll, TrueNumAll, TgtNumAll, pixelsNumber, total_intersection_mid,
                                     total_union_mid, Th_Seg, TEST_DATASET, log_string)
@@ -204,10 +290,11 @@ def main(args):
                 writeMIRST_ROC(FalseNumAll, TrueNumAll, TgtNumAll, pixelsNumber, total_intersection_mid,
                                total_union_mid, Th_Seg, TEST_DATASET, log_string)
 
-        flops, params = profile(detector, inputs=(torch.randn(1, 1, args.seqlen, 200, 300).cuda(),))
-        flops, params = clever_format([flops, params], '%.3f')
-        print('FLOPS for %d frames: ' % SEQ_LEN, flops)
-        print('Params:', count_parameters(detector))
+        if not args.output_only:
+            flops, params = profile(detector, inputs=(torch.randn(1, 1, args.seqlen, 200, 300).cuda(),))
+            flops, params = clever_format([flops, params], '%.3f')
+            print('FLOPS for %d frames: ' % SEQ_LEN, flops)
+            print('Params:', count_parameters(detector))
 
         print("Done!")
 

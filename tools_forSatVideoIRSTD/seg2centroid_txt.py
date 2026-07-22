@@ -33,6 +33,15 @@ def calculate_centroids(mask):
     return results
 
 
+def format_centroid_line(frame_idx, centroids):
+    """Format one frame using the challenge centroid TXT convention."""
+    centroids = sorted(centroids, key=lambda x: x[0])
+    line = f"{frame_idx:05d}   {len(centroids)}   "
+    for _, row, col in centroids:
+        line += f"0     {row:.2f}  {col:.2f}   "
+    return line.strip()
+
+
 def process_sequence(seq_folder, output_txt, thresh):
     mask_files = sorted(glob.glob(os.path.join(seq_folder, '*.png')))
     if not mask_files:
@@ -50,13 +59,7 @@ def process_sequence(seq_folder, output_txt, thresh):
             centroids = calculate_centroids(binary_mask)
             num_targets = len(centroids)
 
-            line = f"{frame_idx:05d}   {num_targets}   "
-            # 按ID排序保证输出顺序一致（可选）
-            centroids.sort(key=lambda x: x[0])
-            for _, row, col in centroids:
-                line += f"0     {row:.2f}  {col:.2f}   "
-
-            f.write(line.strip() + '\n')
+            f.write(format_centroid_line(frame_idx, centroids) + '\n')
             print(f"已处理：{os.path.basename(mask_path)} - 检测到 {num_targets} 个目标")
 
 
