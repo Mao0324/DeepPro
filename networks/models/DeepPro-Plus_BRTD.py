@@ -160,7 +160,10 @@ class SoftLoUloss(nn.Module):
         intersection_sum = torch.sum(intersection, dim=(1, 2, 3))
         pred_sum = torch.sum(midpred, dim=(1, 2, 3))
         target_sum = torch.sum(target, dim=(1, 2, 3))
-        iou = intersection_sum / (
-            pred_sum + target_sum - intersection_sum
+        union = pred_sum + target_sum - intersection_sum
+        iou = torch.where(
+            union > 0,
+            intersection_sum / union.clamp_min(torch.finfo(union.dtype).tiny),
+            torch.ones_like(union),
         )
         return 1 - torch.mean(iou)

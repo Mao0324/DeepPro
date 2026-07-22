@@ -127,7 +127,12 @@ class LegacySoftIoULoss(BinarySegmentationLoss):
         intersection_sum = intersection.sum(dim=(1, 2, 3))
         pred_sum = probability.sum(dim=(1, 2, 3))
         target_sum = target.sum(dim=(1, 2, 3))
-        score = intersection_sum / (pred_sum + target_sum - intersection_sum)
+        union = pred_sum + target_sum - intersection_sum
+        score = torch.where(
+            union > 0,
+            intersection_sum / union.clamp_min(torch.finfo(union.dtype).tiny),
+            torch.ones_like(union),
+        )
         return 1.0 - score.mean()
 
 

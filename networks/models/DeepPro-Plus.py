@@ -121,8 +121,12 @@ class SoftLoUloss(nn.Module):
         intersection_sum = torch.sum(intersection, dim=(1,2,3))
         pred_sum = torch.sum(midpred, dim=(1,2,3))
         target_sum = torch.sum(target, dim=(1,2,3))
-        loss_mid = (intersection_sum + smooth) / \
-               (pred_sum + target_sum - intersection_sum + smooth)
+        union = pred_sum + target_sum - intersection_sum
+        loss_mid = torch.where(
+            union > 0,
+            intersection_sum / union.clamp_min(torch.finfo(union.dtype).tiny),
+            torch.ones_like(union),
+        )
 
         loss_mid = 1 - torch.mean(loss_mid)
 

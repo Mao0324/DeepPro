@@ -3,30 +3,28 @@ Author: Benny
 Date: Nov 2019
 """
 import argparse
+import inspect
 import os
 from data_utils.TestDataLoader import TestIRSeqDataLoader
 import torch
+import torch.nn.functional as F
 import logging
 from pathlib import Path
 import sys
 import importlib
 from tqdm import tqdm
 import numpy as np
-from numpy import *
 import time
 from PIL import Image
 import cv2
-import scipy.io as scio
 from ShootingRules import ShootingRules
-from sklearn.metrics import auc
-from collections import OrderedDict
-from thop import profile, clever_format
 from tools_forSatVideoIRSTD.seg2centroid_txt import (
     calculate_centroids,
     format_centroid_line,
 )
 # from attribution.core import IR_Integrated_gradient, MeanLinearPath, ZeroLinearPath
 from write_results import writeNUDTMIRSDT_ROC, writeMIRST_ROC
+from runtime_utils import load_checkpoint, parse_visible_devices
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
@@ -64,6 +62,10 @@ def parse_args():
                         help='Test windows prefetched by each worker [default: 1]')
     parser.add_argument('--profile_flops', action='store_true', default=False,
                         help='Run the extra THOP forward pass after evaluation')
+    parser.add_argument('--eval_chunk_rows', type=int, default=None,
+                        help='Override checkpoint TPro evaluation row chunk size')
+    parser.add_argument('--overwrite_outputs', action='store_true', default=False,
+                        help='Allow writing into non-empty visual/centroid directories')
     parser.add_argument('--threshold_eval', type=float, default=0.5, help='Threshold in evaluation [default: 0.5]')
     parser.add_argument('--attribution', action='store_true', default=False, help='This test is attribution analysis or not')
     return parser.parse_args()
@@ -90,7 +92,42 @@ def sequence_storage_length(seq_dataset, seq_len):
         for sample in seq_dataset.samplelist
         for frame_data in sample
     )
-    return max(seq_len, last_frame + 1)
+    return last_frame + 1
+
+
+def require_empty_output_directory(path, overwrite):
+    if path.exists() and any(path.iterdir()) and not overwrite:
+        raise FileExistsError(
+            'Output directory is not empty: %s. Use --overwrite_outputs only '
+            'when replacing its contents is intentional.' % path
+        )
+
+
+def resolve_model_name(checkpoint, experiment_dir):
+    model_name = checkpoint.get('model_name')
+    if model_name is None:
+        candidates = sorted(
+            path.stem for path in experiment_dir.glob('*.py')
+            if path.name != 'segmentation_losses.py'
+        )
+        if len(candidates) != 1:
+            raise RuntimeError(
+                'Old checkpoint has no model_name and the experiment contains '
+                '%d model snapshots; expected exactly one.' % len(candidates)
+            )
+        model_name = candidates[0]
+    model_path = (experiment_dir / ('%s.py' % model_name)).resolve()
+    if model_path.parent != experiment_dir or not model_path.is_file():
+        raise ValueError('Unsafe or missing model snapshot: %s' % model_name)
+    return model_name
+
+
+def clean_model_state_dict(state_dict):
+    if state_dict and all(key.startswith('module.') for key in state_dict):
+        return {
+            key[len('module.'):]: value for key, value in state_dict.items()
+        }
+    return state_dict
 
 
 def merge_prediction_window(sequence_prediction, window_prediction, start_frame):
@@ -138,9 +175,29 @@ def main(args):
         raise ValueError('test_workers must be non-negative.')
     if args.prefetch_factor <= 0:
         raise ValueError('prefetch_factor must be positive.')
-
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
-    experiment_dir = args.logpath + 'sem_seg/' + args.log_dir
+    if args.eval_chunk_rows is not None and args.eval_chunk_rows < 0:
+        raise ValueError('eval_chunk_rows must be non-negative.')
+    if args.output_only and not (args.visual or args.centroid_txt):
+        raise ValueError(
+            '--output_only requires --visual and/or --centroid_txt.'
+        )
+    if args.attribution:
+        raise NotImplementedError(
+            'The attribution implementation is not present in this repository; '
+            'refusing to run a misleading empty evaluation.'
+        )
+    visible_devices = parse_visible_devices(args.gpu)
+    if len(visible_devices) != 1:
+        raise ValueError('test.py uses exactly one GPU; pass one --gpu id.')
+    os.environ["CUDA_VISIBLE_DEVICES"] = visible_devices[0]
+    experiment_root = (Path(args.logpath).expanduser().resolve() / 'sem_seg')
+    experiment_dir = (experiment_root / args.log_dir).resolve()
+    try:
+        experiment_dir.relative_to(experiment_root)
+    except ValueError as error:
+        raise ValueError('--log_dir must name an experiment under %s.' % experiment_root) from error
+    if not experiment_dir.is_dir():
+        raise FileNotFoundError('Experiment directory does not exist: %s' % experiment_dir)
     if args.visual:
         if args.visual_count > 0:
             visual_name = 'visual_random_%d_seed%d' % (
@@ -150,17 +207,14 @@ def main(args):
         else:
             visual_name = 'visual'
         visual_dir = Path(experiment_dir) / visual_name
-        if args.visual_count > 0 and visual_dir.exists() and any(visual_dir.iterdir()):
-            raise FileExistsError(
-                'Random visualization directory is not empty: %s. '
-                'Rename/remove it or choose another --visual_seed.' % visual_dir
-            )
+        require_empty_output_directory(visual_dir, args.overwrite_outputs)
         visual_dir.mkdir(parents=True, exist_ok=True)
         visual_rng = np.random.default_rng(args.visual_seed)
         visual_reservoir = []
         visual_seen = 0
     if args.centroid_txt:
         centroid_dir = Path(args.centroid_dir) if args.centroid_dir else Path(experiment_dir) / 'out_centroid'
+        require_empty_output_directory(centroid_dir, args.overwrite_outputs)
         centroid_dir.mkdir(parents=True, exist_ok=True)
 
     '''LOG'''
@@ -168,9 +222,11 @@ def main(args):
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     if args.epoch is None:
-        file_handler = logging.FileHandler('%s/eval.txt' % experiment_dir)
+        file_handler = logging.FileHandler(experiment_dir / 'eval.txt')
     else:
-        file_handler = logging.FileHandler('%s/eval_epoch-%d.txt' % (experiment_dir, args.epoch))
+        file_handler = logging.FileHandler(
+            experiment_dir / ('eval_epoch-%d.txt' % args.epoch)
+        )
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
@@ -206,27 +262,43 @@ def main(args):
     )
 
     '''MODEL LOADING'''
-    model_name = os.listdir(experiment_dir + '/logs')[0].split('.')[0]
-    sys.path.append(experiment_dir)
-    MODEL = importlib.import_module(model_name)
-    # detector = torch.nn.DataParallel(MODEL.generator(NUM_CLASSES, SEQ_LEN)).cuda()
-    detector = MODEL.detector(NUM_CLASSES, SEQ_LEN, SEQ_LEN)
     if args.epoch is None:
-        checkpoint_path = str(experiment_dir) + '/checkpoints/best_model.pth'
+        checkpoint_path = experiment_dir / 'checkpoints' / 'best_model.pth'
     else:
-        checkpoint_path = (
-            str(experiment_dir)
-            + '/checkpoints/epoch_%d_model.pth' % args.epoch
+        checkpoint_path = experiment_dir / 'checkpoints' / (
+            'epoch_%d_model.pth' % args.epoch
         )
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
-    # ## multi-GPU models load on single-GPU device
-    # new_state_dict = OrderedDict()
-    # for k,v in checkpoint['model_state_dict'].items():
-    #     name = k[7:]
-    #     new_state_dict[name] = v
-    # detector.load_state_dict(new_state_dict)   ## or use the above detector definition
-    # ## ##########################################
-    detector.load_state_dict(checkpoint['model_state_dict'])
+    checkpoint = load_checkpoint(checkpoint_path, map_location='cpu')
+    model_name = resolve_model_name(checkpoint, experiment_dir)
+    sys.path.insert(0, str(experiment_dir))
+    MODEL = importlib.import_module(model_name)
+    constructor_parameters = inspect.signature(MODEL.detector).parameters
+    model_config = {
+        key: value
+        for key, value in checkpoint.get('model_config', {}).items()
+        if key in constructor_parameters
+        and key not in {'spatial_ckpt', 'st_ckpt'}
+    }
+    if 'freeze_pretrained' in model_config:
+        model_config['freeze_pretrained'] = False
+    if args.eval_chunk_rows is not None:
+        if 'eval_chunk_rows' not in constructor_parameters:
+            if args.eval_chunk_rows:
+                raise ValueError(
+                    '%s does not support --eval_chunk_rows.' % model_name
+                )
+        else:
+            model_config['eval_chunk_rows'] = args.eval_chunk_rows
+    detector = MODEL.detector(
+        NUM_CLASSES,
+        SEQ_LEN,
+        SEQ_LEN,
+        **model_config,
+    )
+    detector.load_state_dict(
+        clean_model_state_dict(checkpoint['model_state_dict']),
+        strict=True,
+    )
     del checkpoint
     detector = detector.cuda().eval()
     evaluator = None if args.output_only else ShootingRules()
@@ -271,52 +343,56 @@ def main(args):
                 first_frame = int(first_frame.item())
                 end_frame = int(end_frame.item())
 
-                if args.attribution:
-                    paths = [os.path.join(TEST_DATASET.seq_names[seq_idx], '%05d.png' % (fi+1))
-                             for fi in range(first_frame, end_frame+1)]
-                    savepath = os.path.join(experiment_dir, 'Attribution_ZeroLinearPath_0.1')
-                    # seq_midpred = IR_Integrated_gradient(images, targets, (paths, args.dataset, savepath), detector, path_interpolation_func)
+                seq_features, seq_midpred = detector(images)
+                del seq_features
+                expected_spatial_size = (
+                    tuple(images.shape[-2:]) if args.output_only
+                    else tuple(targets.shape[-2:])
+                )
+                if seq_midpred.shape[-2:] != expected_spatial_size:
+                    seq_midpred = F.interpolate(
+                        seq_midpred,
+                        size=expected_spatial_size,
+                        mode='bilinear',
+                        align_corners=False,
+                    )
+                window_prediction = torch.sigmoid(seq_midpred).cpu()
+                del seq_midpred, images
 
-                else:
-                    seq_features, seq_midpred = detector(images)
-                    del seq_features
-                    window_prediction = torch.sigmoid(seq_midpred).cpu()
-                    del seq_midpred, images
-
-                    if seq_midpred_all is None:
-                        seq_midpred_all = torch.zeros(
-                            (1, storage_length) + tuple(window_prediction.shape[-2:]),
-                            dtype=window_prediction.dtype,
-                        )
-                        if not args.output_only:
-                            targets_all = torch.zeros(
-                                (1, storage_length) + tuple(targets.shape[-2:]),
-                                dtype=targets.dtype,
-                            )
-                            centroids_all = torch.zeros(
-                                (1, storage_length) + tuple(centroids.shape[-2:]),
-                                dtype=centroids.dtype,
-                            )
-
-                    merge_prediction_window(
-                        seq_midpred_all,
-                        window_prediction,
-                        first_frame,
+                if seq_midpred_all is None:
+                    seq_midpred_all = torch.zeros(
+                        (1, storage_length) + tuple(window_prediction.shape[-2:]),
+                        dtype=window_prediction.dtype,
                     )
                     if not args.output_only:
-                        copy_annotation_window(
-                            targets_all,
-                            targets,
-                            first_frame,
+                        targets_all = torch.zeros(
+                            (1, storage_length) + tuple(targets.shape[-2:]),
+                            dtype=targets.dtype,
                         )
-                        copy_annotation_window(
-                            centroids_all,
-                            centroids,
-                            first_frame,
+                        centroids_all = torch.zeros(
+                            (1, storage_length) + tuple(centroids.shape[-2:]),
+                            dtype=centroids.dtype,
                         )
-                    del window_prediction, targets, centroids
 
-            if not args.attribution:
+                merge_prediction_window(
+                    seq_midpred_all,
+                    window_prediction,
+                    first_frame,
+                )
+                if not args.output_only:
+                    copy_annotation_window(
+                        targets_all,
+                        targets,
+                        first_frame,
+                    )
+                    copy_annotation_window(
+                        centroids_all,
+                        centroids,
+                        first_frame,
+                    )
+                del window_prediction, targets, centroids
+
+            if seq_midpred_all is not None:
                 seq_name = TEST_DATASET.seq_names[seq_idx]
                 centroid_lines = []
                 if not args.output_only:
@@ -420,7 +496,7 @@ def main(args):
         )
         # print('FPS=%.3f' % (2000*1.2 / (time_end - time_start)))
         ############### log Pd&Fa results ###############
-        if not args.attribution and not args.output_only:
+        if not args.output_only:
             if 'NUDT-MIRSDT' in args.dataset:
                 writeNUDTMIRSDT_ROC(FalseNumAll, TrueNumAll, TgtNumAll, pixelsNumber, total_intersection_mid,
                                     total_union_mid, Th_Seg, TEST_DATASET, log_string)
@@ -442,6 +518,12 @@ def main(args):
             log_string('Eval pixel F1: %f' % pixel_f1)
 
         if args.profile_flops:
+            try:
+                from thop import profile, clever_format
+            except ImportError as error:
+                raise RuntimeError(
+                    '--profile_flops requires the optional thop package.'
+                ) from error
             flops, params = profile(detector, inputs=(torch.randn(1, 1, args.seqlen, 200, 300).cuda(),))
             flops, params = clever_format([flops, params], '%.3f')
             print('FLOPS for %d frames: ' % SEQ_LEN, flops)

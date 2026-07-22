@@ -5,13 +5,17 @@ import glob
 
 
 def calculate_centroids(mask):
-    """计算二值图中各目标的质心坐标，并分配动态ID"""
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    """计算二值图中各目标的质心 ``(id, x, y)``，并分配动态 ID。"""
+    num_labels, labels, stats, component_centroids = (
+        cv2.connectedComponentsWithStats(mask, connectivity=8)
+    )
     results = []
 
     # 遍历所有目标（忽略背景）
     for label in range(1, num_labels):
-        target_mask = np.uint8(labels == label) * 255
+        left, top, width, height, _ = stats[label]
+        component_labels = labels[top:top + height, left:left + width]
+        target_mask = np.uint8(component_labels == label) * 255
         contours, _ = cv2.findContours(target_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         if contours:
@@ -19,16 +23,14 @@ def calculate_centroids(mask):
             M = cv2.moments(max_contour)
 
             if M["m00"] != 0:
-                cx = M["m10"] / M["m00"]
-                cy = M["m01"] / M["m00"]
+                cx = left + M["m10"] / M["m00"]
+                cy = top + M["m01"] / M["m00"]
                 # 使用label作为唯一ID（从1开始）
-                results.append((label, round(cy, 2), round(cx, 2)))
+                results.append((label, round(cx, 2), round(cy, 2)))
             else:
-                y, x = np.where(labels == label)
-                centroid_row = np.mean(y).round(2)
-                centroid_col = np.mean(x).round(2)
+                cx, cy = component_centroids[label]
                 # 使用label作为唯一ID（从1开始）
-                results.append((label, centroid_row, centroid_col))
+                results.append((label, round(cx, 2), round(cy, 2)))
 
     return results
 
@@ -37,8 +39,8 @@ def format_centroid_line(frame_idx, centroids):
     """Format one frame using the challenge centroid TXT convention."""
     centroids = sorted(centroids, key=lambda x: x[0])
     line = f"{frame_idx:05d}   {len(centroids)}   "
-    for _, row, col in centroids:
-        line += f"0     {row:.2f}  {col:.2f}   "
+    for _, x_coordinate, y_coordinate in centroids:
+        line += f"0     {x_coordinate:.2f}  {y_coordinate:.2f}   "
     return line.strip()
 
 

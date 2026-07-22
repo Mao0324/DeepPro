@@ -4,6 +4,7 @@ Date: Nov 2019
 """
 import argparse
 import gc
+import inspect
 import os
 from data_utils.TrainDataLoader import TrainIRSeqDataLoader
 from data_utils.TestDataLoader import TestIRSeqDataLoader
@@ -20,16 +21,29 @@ from pathlib import Path
 import sys
 import importlib
 import shutil
+import subprocess
 from tqdm import tqdm
 import numpy as np
-import time
 import random
 import torch.nn.functional as F
+from torch.nn.parallel import DistributedDataParallel
+from torch.utils.data import ConcatDataset
+from torch.utils.data.distributed import DistributedSampler
 
-try:
-    import swanlab
-except ImportError:
-    swanlab = None
+from runtime_utils import (
+    all_reduce_sum,
+    atomic_torch_save,
+    broadcast_object,
+    distributed_barrier,
+    finalize_distributed,
+    initialize_distributed,
+    launch_with_torchrun_if_needed,
+    load_checkpoint,
+    move_optimizer_state,
+    parse_visible_devices,
+    unwrap_model,
+)
+from sequence_utils import SequenceAccumulator, frame_range_length
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
@@ -42,14 +56,131 @@ def inplace_relu(m):
         m.inplace=True
 
 
-def seed_everything(seed=46):
+def seed_everything(seed=46, deterministic=False):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = deterministic
+    torch.backends.cudnn.benchmark = not deterministic
+
+
+def seed_worker(_worker_id):
+    worker_seed = torch.initial_seed() % (2 ** 32)
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
+def model_configuration(model_module, args):
+    """Build supported constructor options and persist them in checkpoints."""
+    parameters = inspect.signature(model_module.detector).parameters
+    configuration = {}
+    if 'eval_chunk_rows' in parameters:
+        configuration['eval_chunk_rows'] = args.eval_chunk_rows
+    elif args.eval_chunk_rows:
+        raise ValueError(
+            '%s does not support --eval_chunk_rows.' % args.model
+        )
+    if 'spatial_ckpt' in parameters:
+        configuration.update({
+            'spatial_ckpt': args.spatial_ckpt,
+            'st_ckpt': args.st_ckpt,
+            'freeze_pretrained': bool(args.freeze_pretrained),
+        })
+    return configuration
+
+
+def make_checkpoint_state(detector, optimizer, epoch, best_iou, args, config):
+    stored_config = dict(config)
+    if 'spatial_ckpt' in stored_config:
+        # Branch weights are already part of model_state_dict. Test/resume must
+        # not depend on, or unexpectedly reopen, the original pretrain paths.
+        stored_config['spatial_ckpt'] = None
+        stored_config['st_ckpt'] = None
+        stored_config['freeze_pretrained'] = False
+    return {
+        'epoch': epoch,
+        'class_avg_iou': best_iou,
+        'model_name': args.model,
+        'model_config': stored_config,
+        'model_state_dict': unwrap_model(detector).state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+    }
+
+
+def evaluate_sequences(
+    detector,
+    criterion,
+    sequence_datasets,
+    validation_loader,
+    device,
+    threshold,
+    epoch,
+    show_progress,
+):
+    """Evaluate each physical frame once after overlap-aware stitching."""
+    detector.eval()
+    metric_counts = torch.zeros(3, device=device, dtype=torch.int64)
+    loss_sum = torch.zeros((), device=device, dtype=torch.float64)
+    loss_count = 0
+    validation_iterator = iter(validation_loader)
+
+    with torch.inference_mode():
+        for sequence_dataset in tqdm(
+            sequence_datasets,
+            total=len(sequence_datasets),
+            smoothing=0.9,
+            disable=not show_progress,
+        ):
+            accumulator = SequenceAccumulator()
+            for _ in range(len(sequence_dataset)):
+                images, targets, _centroids, first_end = next(
+                    validation_iterator
+                )
+                images = images.float().to(device, non_blocking=True)
+                targets = targets.float().to(device, non_blocking=True)
+                sequence_features, sequence_logits = detector(images)
+                del sequence_features
+                if sequence_logits.shape[-2:] != targets.shape[-2:]:
+                    sequence_logits = F.interpolate(
+                        sequence_logits,
+                        size=targets.shape[-2:],
+                        mode='bilinear',
+                        align_corners=False,
+                    )
+                valid_length = frame_range_length(first_end)
+                valid_logits = sequence_logits[:, :valid_length]
+                valid_targets = targets[:, :valid_length]
+                valid_images = images[:, :, :valid_length]
+                loss_sum += criterion(
+                    valid_logits,
+                    valid_targets,
+                    images=valid_images,
+                    epoch=epoch,
+                ).to(torch.float64)
+                loss_count += 1
+                accumulator.add(
+                    torch.sigmoid(valid_logits),
+                    valid_targets,
+                    first_end,
+                )
+                del sequence_logits, valid_logits, valid_targets, valid_images
+                del images, targets, _centroids
+
+            predicted = accumulator.predictions.gt(threshold)
+            target = accumulator.targets.gt(0)
+            metric_counts[0] += torch.logical_and(predicted, target).sum(
+                dtype=torch.int64
+            )
+            metric_counts[1] += predicted.sum(dtype=torch.int64)
+            metric_counts[2] += target.sum(dtype=torch.int64)
+            del accumulator, predicted, target
+
+    if loss_count == 0:
+        raise RuntimeError('Validation loader contains no windows.')
+    metrics = binary_segmentation_metrics(*metric_counts)
+    return (loss_sum / loss_count).item(), metrics
 
 
 def multiprocessing_loader_options(worker_count, prefetch_factor):
@@ -156,91 +287,158 @@ def parse_args():
                         help='Persistent DataLoader workers used for validation [default: 4]')
     parser.add_argument('--prefetch_factor', type=int, default=2,
                         help='Batches prefetched by each DataLoader worker [default: 2]')
-    parser.add_argument('--use_swanlab', type=int, default=1, choices=[0, 1], help='Use SwanLab logging [default: 1]')
+    parser.add_argument('--use_swanlab', type=int, default=0, choices=[0, 1], help='Use SwanLab logging [default: 0]')
     parser.add_argument('--swanlab_project', type=str, default='DeepPro', help='SwanLab project name')
     parser.add_argument("--spatial_ckpt", type=str, default="")
     parser.add_argument("--st_ckpt", type=str, default="")
     parser.add_argument("--freeze_pretrained", type=int, default=1)
+    parser.add_argument('--eval_chunk_rows', type=int, default=0,
+                        help='TPro evaluation row chunk size; 0 disables chunking')
+    parser.add_argument('--seed', type=int, default=46)
+    parser.add_argument('--deterministic', type=int, default=0, choices=[0, 1],
+                        help='Use deterministic cuDNN kernels (may reduce speed)')
+    parser.add_argument('--resume', choices=['auto', 'never'], default='auto',
+                        help='Resume a valid checkpoint or refuse unsafe overwrite')
+    parser.add_argument('--resume_checkpoint', type=str, default=None,
+                        help='Explicit checkpoint to resume')
+    parser.add_argument('--run_test_after_train', type=int, default=1,
+                        choices=[0, 1], help='Run test.py after successful training')
 
     return parser.parse_args()
 
 
 def main(args):
-    def log_string(str):
-        logger.info(str)
-        print(str)
-
-    def release_cuda_memory(stage):
-        """Release unreferenced CUDA blocks at train/eval phase boundaries."""
-        gc.collect()
-        if not torch.cuda.is_available():
-            return
-        for device_id in range(torch.cuda.device_count()):
-            with torch.cuda.device(device_id):
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
-        allocated = sum(
-            torch.cuda.memory_allocated(device_id)
-            for device_id in range(torch.cuda.device_count())
-        ) / (1024 ** 3)
-        reserved = sum(
-            torch.cuda.memory_reserved(device_id)
-            for device_id in range(torch.cuda.device_count())
-        ) / (1024 ** 3)
-        log_string(
-            'CUDA memory after %s: allocated=%.3f GiB, reserved=%.3f GiB'
-            % (stage, allocated, reserved)
-        )
-
-    '''HYPER PARAMETER'''
     if args.train_workers < 0 or args.val_workers < 0:
         raise ValueError('DataLoader worker counts must be non-negative.')
     if args.prefetch_factor <= 0:
         raise ValueError('prefetch_factor must be positive.')
-    if args.gpu_num == 1:
-        os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
-    else:
-        os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+    if args.batch_size <= 0 or args.gpu_num <= 0:
+        raise ValueError('batch_size and gpu_num must be positive.')
+    if args.eval_chunk_rows < 0:
+        raise ValueError('eval_chunk_rows must be non-negative.')
 
-    '''CREATE DIR'''
-    timestr = str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
-    experiment_dir = Path(args.savepath)
-    experiment_dir.mkdir(exist_ok=True)
-    experiment_dir = experiment_dir.joinpath('sem_seg')
-    experiment_dir.mkdir(exist_ok=True)
-    if args.log_dir is None:
+    runtime = initialize_distributed(args.gpu, args.gpu_num)
+    if args.batch_size % runtime.world_size:
+        finalize_distributed(runtime)
+        raise ValueError(
+            'Global --batch_size=%d must be divisible by world size %d.'
+            % (args.batch_size, runtime.world_size)
+        )
+    seed_everything(
+        args.seed + runtime.rank,
+        deterministic=bool(args.deterministic),
+    )
+
+    if args.log_dir is None and runtime.is_main:
+        timestr = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S-%f')
         args.log_dir = (
             args.dataset + '__' + timestr + '__'
             + loss_experiment_name(args.loss) + '_'
             + args.model + '_DataL' + str(args.seqlen)
         )
-        experiment_dir = experiment_dir.joinpath(args.log_dir)
-    else:
-        experiment_dir = experiment_dir.joinpath(args.log_dir)
-    experiment_dir.mkdir(exist_ok=True)
-    checkpoints_dir = experiment_dir.joinpath('checkpoints/')
-    checkpoints_dir.mkdir(exist_ok=True)
-    log_dir = experiment_dir.joinpath('logs/')
-    log_dir.mkdir(exist_ok=True)
+    args.log_dir = broadcast_object(args.log_dir, runtime)
+    args.savepath = str(Path(args.savepath).expanduser().resolve())
+    experiment_root = Path(args.savepath) / 'sem_seg'
+    experiment_dir = (experiment_root / args.log_dir).resolve()
+    try:
+        experiment_dir.relative_to(experiment_root)
+    except ValueError as error:
+        finalize_distributed(runtime)
+        raise ValueError(
+            '--log_dir must name an experiment under %s.' % experiment_root
+        ) from error
+    checkpoints_dir = experiment_dir / 'checkpoints'
+    log_dir = experiment_dir / 'logs'
 
-    '''LOG'''
-    logger = logging.getLogger("Model")
+    experiment_preexisting = False
+    resume_path = None
+    setup_error = None
+    if runtime.is_main:
+        try:
+            experiment_preexisting = (
+                experiment_dir.exists() and any(experiment_dir.iterdir())
+            )
+            if args.resume_checkpoint:
+                candidate = Path(args.resume_checkpoint).expanduser().resolve()
+                if not candidate.is_file():
+                    raise FileNotFoundError(
+                        'Resume checkpoint does not exist: %s' % candidate
+                    )
+                resume_path = str(candidate)
+            elif args.resume == 'auto':
+                for filename in ('latest_model.pth', 'best_model.pth'):
+                    candidate = checkpoints_dir / filename
+                    if candidate.is_file():
+                        resume_path = str(candidate)
+                        break
+                if resume_path is None and experiment_preexisting:
+                    raise RuntimeError(
+                        'Experiment directory is non-empty but has no resumable '
+                        'checkpoint: %s. Refusing to overwrite it.'
+                        % experiment_dir
+                    )
+            elif experiment_preexisting:
+                raise RuntimeError(
+                    'Experiment directory already contains files: %s. '
+                    '--resume never refuses to overwrite them.' % experiment_dir
+                )
+
+            checkpoints_dir.mkdir(parents=True, exist_ok=True)
+            log_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as error:
+            setup_error = '%s: %s' % (type(error).__name__, error)
+    setup_error = broadcast_object(setup_error, runtime)
+    resume_path = broadcast_object(resume_path, runtime)
+    if setup_error is not None:
+        finalize_distributed(runtime)
+        raise RuntimeError(setup_error)
+    distributed_barrier(runtime)
+
+    logger = logging.getLogger('Model-rank%d' % runtime.rank)
+    logger.handlers.clear()
     logger.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler = logging.FileHandler('%s/%s.txt' % (log_dir, args.model))
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    if runtime.is_main:
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        file_handler = logging.FileHandler(log_dir / ('%s.txt' % args.model))
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    else:
+        logger.addHandler(logging.NullHandler())
+
+    def log_string(message):
+        if runtime.is_main:
+            logger.info(message)
+            print(message, flush=True)
+
+    def release_cuda_memory(stage):
+        gc.collect()
+        torch.cuda.synchronize(runtime.device)
+        torch.cuda.empty_cache()
+        if runtime.is_main:
+            log_string(
+                'CUDA memory after %s: allocated=%.3f GiB, reserved=%.3f GiB'
+                % (
+                    stage,
+                    torch.cuda.memory_allocated(runtime.device) / (1024 ** 3),
+                    torch.cuda.memory_reserved(runtime.device) / (1024 ** 3),
+                )
+            )
+
     log_string('PARAMETER ...')
     log_string(args)
-
     swanlab_run = None
-    if args.use_swanlab:
-        if swanlab is None:
+    swanlab_module = None
+    if args.use_swanlab and runtime.is_main:
+        try:
+            import swanlab as swanlab_module
+        except ImportError:
             log_string('SwanLab is not installed. Skip SwanLab logging.')
-        else:
+        if swanlab_module is not None:
             try:
-                swanlab_run = swanlab.init(
+                swanlab_run = swanlab_module.init(
                     project=args.swanlab_project,
                     experiment_name=args.log_dir,
                     config=vars(args),
@@ -249,70 +447,122 @@ def main(args):
                 log_string('SwanLab init failed: %s. Skip SwanLab logging.' % e)
                 swanlab_run = None
 
+    args.datapath = str(Path(args.datapath).expanduser().resolve())
     root = args.datapath
     NUM_CLASSES = 1
     SEQ_LEN = args.seqlen
-    BATCH_SIZE = args.batch_size
+    local_batch_size = args.batch_size // runtime.world_size
+    train_workers = (
+        0 if args.train_workers == 0 else
+        max(1, (args.train_workers + runtime.world_size - 1) // runtime.world_size)
+    )
 
-    print("start loading training data ...")
+    log_string("start loading training data ...")
     TRAIN_DATASET = TrainIRSeqDataLoader(args.dataset, data_root=root, seq_len=SEQ_LEN, sample_rate=args.sample_rate,
                                          patch_size=args.patch_size, transform=None)  # sample_rate=0.1, 0.03, 0.05
-    print("start loading test data ...")
-    TEST_DATASET  = TestIRSeqDataLoader(args.dataset, data_root=root,  seq_len=SEQ_LEN, cat_len=int(SEQ_LEN*0.1), transform=None)
-    VALIDATION_DATASET = TEST_DATASET.flatten_windows()
+    train_sampler = None
+    if runtime.distributed:
+        train_sampler = DistributedSampler(
+            TRAIN_DATASET,
+            num_replicas=runtime.world_size,
+            rank=runtime.rank,
+            shuffle=True,
+            seed=args.seed,
+            drop_last=True,
+        )
+    loader_generator = torch.Generator()
+    loader_generator.manual_seed(args.seed + runtime.rank)
 
     trainDataLoader = torch.utils.data.DataLoader(
         TRAIN_DATASET,
-        batch_size=BATCH_SIZE,
-        shuffle=True,
+        batch_size=local_batch_size,
+        shuffle=train_sampler is None,
+        sampler=train_sampler,
         pin_memory=True,
         drop_last=True,
-        worker_init_fn=lambda x: np.random.seed(x + int(time.time())),
+        worker_init_fn=seed_worker,
+        generator=loader_generator,
         **multiprocessing_loader_options(
-            args.train_workers,
+            train_workers,
             args.prefetch_factor,
         )
     )
-    validationDataLoader = torch.utils.data.DataLoader(
-        VALIDATION_DATASET,
-        batch_size=1,
-        shuffle=False,
-        pin_memory=True,
-        **multiprocessing_loader_options(
-            args.val_workers,
-            args.prefetch_factor,
+    if len(trainDataLoader) == 0:
+        finalize_distributed(runtime)
+        raise RuntimeError(
+            'Training DataLoader has no full global batch; increase data or '
+            'reduce --batch_size.'
         )
-    )
+
+    TEST_DATASET = None
+    sequence_datasets = None
+    validationDataLoader = None
+    if runtime.is_main:
+        log_string("start loading validation data ...")
+        TEST_DATASET = TestIRSeqDataLoader(
+            args.dataset,
+            data_root=root,
+            seq_len=SEQ_LEN,
+            cat_len=int(SEQ_LEN * 0.1),
+            transform=None,
+        )
+        sequence_datasets = [
+            TEST_DATASET[index] for index in range(len(TEST_DATASET))
+        ]
+        validationDataLoader = torch.utils.data.DataLoader(
+            ConcatDataset(sequence_datasets),
+            batch_size=1,
+            shuffle=False,
+            pin_memory=True,
+            **multiprocessing_loader_options(
+                args.val_workers,
+                args.prefetch_factor,
+            )
+        )
 
     log_string("The number of training data is: %d" % len(TRAIN_DATASET))
-    log_string("The number of test data is: %d sequences" % len(TEST_DATASET))
-    log_string(
-        "DataLoader workers: train=%d, validation=%d, prefetch_factor=%d"
-        % (args.train_workers, args.val_workers, args.prefetch_factor)
-    )
+    if runtime.is_main:
+        log_string("The number of test data is: %d sequences" % len(TEST_DATASET))
+        log_string(
+            "DDP world_size=%d, global_batch=%d, per_rank_batch=%d; "
+            "DataLoader workers per rank=%d, validation=%d"
+            % (
+                runtime.world_size,
+                args.batch_size,
+                local_batch_size,
+                train_workers,
+                args.val_workers,
+            )
+        )
 
     '''MODEL LOADING'''
+    models_dir = (Path(ROOT_DIR) / 'networks' / 'models').resolve()
+    model_source = (models_dir / ('%s.py' % args.model)).resolve()
+    if model_source.parent != models_dir or not model_source.is_file():
+        finalize_distributed(runtime)
+        raise ValueError('Unknown or unsafe model name: %s' % args.model)
     MODEL = importlib.import_module(args.model)
-    shutil.copy('networks/models/%s.py' % args.model, str(experiment_dir))
-    shutil.copy(
-        'networks/losses/segmentation_losses.py',
-        str(experiment_dir),
-    )
-
-    if "TDCSTA" in args.model:
-        detector = MODEL.detector(
-            NUM_CLASSES,
-            SEQ_LEN,
-            SEQ_LEN,
-            spatial_ckpt=args.spatial_ckpt,
-            st_ckpt=args.st_ckpt,
-            freeze_pretrained=bool(args.freeze_pretrained),
+    if runtime.is_main:
+        model_snapshot = experiment_dir / model_source.name
+        loss_source = (
+            Path(ROOT_DIR) / 'networks' / 'losses' / 'segmentation_losses.py'
         )
-    else:
-        detector = MODEL.detector(NUM_CLASSES, SEQ_LEN, SEQ_LEN)
-    if args.gpu_num > 1:
-        detector = torch.nn.DataParallel(detector)#, device_ids=list(np.arange(args.gpu_num)))
-    detector = detector.cuda()
+        loss_snapshot = experiment_dir / loss_source.name
+        if not model_snapshot.exists():
+            shutil.copy2(model_source, model_snapshot)
+        if not loss_snapshot.exists():
+            shutil.copy2(loss_source, loss_snapshot)
+    distributed_barrier(runtime)
+
+    config = model_configuration(MODEL, args)
+    detector = MODEL.detector(NUM_CLASSES, SEQ_LEN, SEQ_LEN, **config)
+    detector = detector.to(runtime.device)
+    if runtime.distributed:
+        detector = DistributedDataParallel(
+            detector,
+            device_ids=[runtime.local_rank],
+            output_device=runtime.local_rank,
+        )
     criterion = build_segmentation_loss(
         args.loss,
         eps=args.loss_eps,
@@ -334,7 +584,7 @@ def main(args):
         stc_center_weight=args.stc_center_weight,
         stc_temporal_weight=args.stc_temporal_weight,
         stc_warmup_epochs=args.stc_warmup_epochs,
-    ).cuda()
+    ).to(runtime.device)
     log_string('Loss: %s - %s' % (args.loss, LOSS_DESCRIPTIONS[args.loss]))
     if getattr(criterion, 'requires_images', False):
         log_string(
@@ -358,63 +608,65 @@ def main(args):
         )
 
     best_iou = 0
-    checkpoint = None
-    try:
-        checkpoint = torch.load(str(experiment_dir) + '/checkpoints/best_model.pth')
-        start_epoch = checkpoint['epoch'] + 1
-        if hasattr(detector, 'module'):
-            detector.module.load_state_dict(checkpoint['model_state_dict'])
-        else:
-            detector.load_state_dict(checkpoint['model_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        best_iou = checkpoint.get('class_avg_iou', 0)
-        log_string('Use pretrain model')
-    except Exception as e:
-        log_string('No existing model or failed to load checkpoint: %s' % e)
-        log_string('Starting training from scratch...')
-        start_epoch = 0
+    start_epoch = 0
+    if resume_path is not None:
+        try:
+            checkpoint = load_checkpoint(resume_path, map_location='cpu')
+            checkpoint_model = checkpoint.get('model_name')
+            if checkpoint_model is not None and checkpoint_model != args.model:
+                raise ValueError(
+                    'Checkpoint model %s does not match --model %s.'
+                    % (checkpoint_model, args.model)
+                )
+            unwrap_model(detector).load_state_dict(
+                checkpoint['model_state_dict'], strict=True
+            )
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            move_optimizer_state(optimizer, runtime.device)
+            start_epoch = int(checkpoint['epoch']) + 1
+            best_iou = float(checkpoint.get('class_avg_iou', 0.0))
+            log_string(
+                'Resumed checkpoint %s at epoch %d.'
+                % (resume_path, start_epoch)
+            )
+            del checkpoint
+        except Exception as error:
+            finalize_distributed(runtime)
+            raise RuntimeError(
+                'Checkpoint recovery failed; refusing to overwrite experiment '
+                '%s: %s' % (experiment_dir, error)
+            ) from error
+    else:
+        log_string('Starting a new experiment from scratch.')
 
-    # load_state_dict copies checkpoint values into the live model/optimizer;
-    # retaining the source dictionary would keep a duplicate set of tensors.
-    del checkpoint
     release_cuda_memory('checkpoint loading')
 
 
     LEARNING_RATE_CLIP = 1e-5
-    global_epoch = 0
-    ## train
     for epoch in range(start_epoch, args.epoch):
-        '''Train'''
-        log_string('**** Epoch %d (%d/%s) ****' % (global_epoch + 1, epoch + 1, args.epoch))
+        log_string('**** Epoch %d/%s ****' % (epoch + 1, args.epoch))
         lr = max(args.learning_rate * (args.lr_decay ** (epoch // args.step_size)), LEARNING_RATE_CLIP)
         log_string('Learning rate:%f' % lr)
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
-        num_batches = len(trainDataLoader)
-        metric_device = next(detector.parameters()).device
-        total_true_positive_mid = torch.zeros(
-            (), device=metric_device, dtype=torch.int64
-        )
-        total_predicted_positive_mid = torch.zeros(
-            (), device=metric_device, dtype=torch.int64
-        )
-        total_target_positive_mid = torch.zeros(
-            (), device=metric_device, dtype=torch.int64
-        )
-        loss_sum = torch.zeros(
-            (), device=metric_device, dtype=torch.float64
-        )
+        if train_sampler is not None:
+            train_sampler.set_epoch(epoch)
+        metric_counts = torch.zeros(3, device=runtime.device, dtype=torch.int64)
+        loss_stats = torch.zeros(2, device=runtime.device, dtype=torch.float64)
         detector.train()
 
-        for i, (images, targets) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
+        for images, targets in tqdm(
+            trainDataLoader,
+            total=len(trainDataLoader),
+            smoothing=0.9,
+            disable=not runtime.is_main,
+        ):
             optimizer.zero_grad(set_to_none=True)
-            # For debugging NaN/invalid gradients only; enabling anomaly
-            # detection here forces extra synchronization every batch.
-            # torch.autograd.set_detect_anomaly(True)
-            images = images.float().cuda(non_blocking=True)
-            targets = targets.float().cuda(non_blocking=True)
+            images = images.float().to(runtime.device, non_blocking=True)
+            targets = targets.float().to(runtime.device, non_blocking=True)
 
-            _, seq_midpred = detector(images)
+            sequence_features, seq_midpred = detector(images)
+            del sequence_features
 
             loss = criterion(
                 seq_midpred,
@@ -430,35 +682,29 @@ def main(args):
                     args.threshold_eval
                 )
                 batch_label = targets.gt(0)
-                total_true_positive_mid += torch.logical_and(
+                metric_counts[0] += torch.logical_and(
                     midpred_choice,
                     batch_label,
                 ).sum(dtype=torch.int64)
-                total_predicted_positive_mid += midpred_choice.sum(
+                metric_counts[1] += midpred_choice.sum(
                     dtype=torch.int64
                 )
-                total_target_positive_mid += batch_label.sum(
+                metric_counts[2] += batch_label.sum(
                     dtype=torch.int64
                 )
-                loss_sum += loss.detach().to(torch.float64)
-            # break
+                loss_stats[0] += loss.detach().to(torch.float64)
+                loss_stats[1] += 1
+            del images, targets, seq_midpred, loss, midpred_choice, batch_label
 
-        # The last training batch and its gradients otherwise remain alive
-        # throughout validation because Python blocks do not create a scope.
         optimizer.zero_grad(set_to_none=True)
-        train_loss = (loss_sum / num_batches).item()
+        all_reduce_sum(metric_counts, runtime)
+        all_reduce_sum(loss_stats, runtime)
+        train_loss = (loss_stats[0] / loss_stats[1].clamp_min(1)).item()
         train_iou, train_precision, train_recall, train_f1 = (
-            binary_segmentation_metrics(
-                total_true_positive_mid,
-                total_predicted_positive_mid,
-                total_target_positive_mid,
-            )
+            binary_segmentation_metrics(*metric_counts)
         )
 
-        del images, targets, seq_midpred, loss
-        del midpred_choice, batch_label
-        del total_true_positive_mid
-        del total_predicted_positive_mid, total_target_positive_mid, loss_sum
+        del metric_counts, loss_stats
         release_cuda_memory('training cleanup')
 
         log_string('Training mean loss: %f' % train_loss)
@@ -467,7 +713,7 @@ def main(args):
         log_string('Training pixel recall: %f' % train_recall)
         log_string('Training pixel F1: %f' % train_f1)
         if swanlab_run is not None:
-            swanlab.log({
+            swanlab_module.log({
                 'train/loss': train_loss,
                 'train/iou': train_iou,
                 'train/precision': train_precision,
@@ -476,124 +722,54 @@ def main(args):
                 'train/lr': lr,
             }, step=epoch + 1)
 
-        if (epoch + 1) % 5 == 0 or epoch + 1 == args.epoch:
-            logger.info('Save model...')
-            savepath = str(checkpoints_dir) + '/epoch_' + str(epoch+1) + '_model.pth'
-            log_string('Saving at %s' % savepath)
-            if args.gpu_num > 1:
-                state = {
-                    'epoch': epoch,
-                    'model_state_dict': detector.module.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                }
-            else:
-                state = {
-                    'epoch': epoch,
-                    'model_state_dict': detector.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                }
-            torch.save(state, savepath)
-            del state
-            log_string('Saving model....')
-
-        '''Evaluate'''
-        with torch.inference_mode():
-            num_batches = len(validationDataLoader)
-            total_true_positive_mid = torch.zeros(
-                (), device=metric_device, dtype=torch.int64
-            )
-            total_predicted_positive_mid = torch.zeros(
-                (), device=metric_device, dtype=torch.int64
-            )
-            total_target_positive_mid = torch.zeros(
-                (), device=metric_device, dtype=torch.int64
-            )
-            loss_g_sum = torch.zeros(
-                (), device=metric_device, dtype=torch.float64
-            )
-            detector.eval()
-
-            log_string('---- EPOCH %03d EVALUATION ----' % (global_epoch + 1))
-            for images, targets, _, _ in tqdm(
+        distributed_barrier(runtime)
+        if runtime.is_main:
+            log_string('---- EPOCH %03d EVALUATION ----' % (epoch + 1))
+            eval_loss, eval_metrics = evaluate_sequences(
+                unwrap_model(detector),
+                criterion,
+                sequence_datasets,
                 validationDataLoader,
-                total=num_batches,
-                smoothing=0.9,
-            ):
-                images = images.float().cuda(non_blocking=True)
-                targets = targets.float().cuda(non_blocking=True)
-
-                _, seq_midpred = detector(images)
-                if seq_midpred.shape[-1] != targets.shape[-1]:
-                    seq_midpred = F.interpolate(
-                        seq_midpred,
-                        size=targets.shape[-2:],
-                    )
-
-                loss_g_sum += criterion(
-                    seq_midpred,
-                    targets,
-                    images=images,
-                    epoch=epoch,
-                ).to(torch.float64)
-                pred_choice_mid = torch.sigmoid(seq_midpred).gt(
-                    args.threshold_eval
-                )
-                batch_label = targets.gt(0)
-                total_true_positive_mid += torch.logical_and(
-                    pred_choice_mid,
-                    batch_label,
-                ).sum(dtype=torch.int64)
-                total_predicted_positive_mid += pred_choice_mid.sum(
-                    dtype=torch.int64
-                )
-                total_target_positive_mid += batch_label.sum(
-                    dtype=torch.int64
-                )
-
-            mIoU_mid, eval_precision, eval_recall, eval_f1 = (
-                binary_segmentation_metrics(
-                    total_true_positive_mid,
-                    total_predicted_positive_mid,
-                    total_target_positive_mid,
-                )
+                runtime.device,
+                args.threshold_eval,
+                epoch,
+                show_progress=True,
             )
-            eval_loss = (loss_g_sum / num_batches).item()
-            del images, targets, seq_midpred
-            del pred_choice_mid, batch_label
-            del total_true_positive_mid
-            del total_predicted_positive_mid, total_target_positive_mid
-            del loss_g_sum
+            mIoU_mid, eval_precision, eval_recall, eval_f1 = eval_metrics
             log_string('Eval mean loss: %f' % eval_loss)
             log_string('Eval avg class IoU of prediction: %f' % (mIoU_mid))
             log_string('Eval pixel precision: %f' % eval_precision)
             log_string('Eval pixel recall: %f' % eval_recall)
             log_string('Eval pixel F1: %f' % eval_f1)
 
+            improved = mIoU_mid >= best_iou
             if mIoU_mid >= best_iou:
                 best_iou = mIoU_mid
-                logger.info('Save model...')
-                savepath = str(checkpoints_dir) + '/best_model.pth'
-                log_string('Saving at %s' % savepath)
-                if args.gpu_num > 1:
-                    state = {
-                        'epoch': epoch,
-                        'class_avg_iou': mIoU_mid,
-                        'model_state_dict': detector.module.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict(),
-                    }
-                else:
-                    state = {
-                        'epoch': epoch,
-                        'class_avg_iou': mIoU_mid,
-                        'model_state_dict': detector.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict(),
-                    }
-                torch.save(state, savepath)
-                del state
-                log_string('Saving model....')
+            state = make_checkpoint_state(
+                detector,
+                optimizer,
+                epoch,
+                best_iou,
+                args,
+                config,
+            )
+            latest_path = checkpoints_dir / 'latest_model.pth'
+            atomic_torch_save(state, latest_path)
+            log_string('Saved recoverable checkpoint at %s' % latest_path)
+            if (epoch + 1) % 5 == 0 or epoch + 1 == args.epoch:
+                epoch_path = checkpoints_dir / (
+                    'epoch_%d_model.pth' % (epoch + 1)
+                )
+                atomic_torch_save(state, epoch_path)
+                log_string('Saved epoch checkpoint at %s' % epoch_path)
+            if improved:
+                best_path = checkpoints_dir / 'best_model.pth'
+                atomic_torch_save(state, best_path)
+                log_string('Saved best checkpoint at %s' % best_path)
+            del state
             log_string('Best mIoU_mid: %f' % best_iou)
             if swanlab_run is not None:
-                swanlab.log({
+                swanlab_module.log({
                     'eval/loss': eval_loss,
                     'eval/iou': mIoU_mid,
                     'eval/precision': eval_precision,
@@ -602,28 +778,50 @@ def main(args):
                     'eval/best_iou': best_iou,
                 }, step=epoch + 1)
 
+        best_iou = broadcast_object(
+            best_iou if runtime.is_main else None,
+            runtime,
+        )
+        distributed_barrier(runtime)
         release_cuda_memory('evaluation cleanup')
-        global_epoch += 1
 
-    if swanlab_run is not None and hasattr(swanlab, 'finish'):
-        swanlab.finish()
+    if swanlab_run is not None and hasattr(swanlab_module, 'finish'):
+        swanlab_module.finish()
 
-    # main() is followed by a separate test.py process. Explicit teardown is
-    # required so the parent process does not keep CUDA cache while the child
-    # allocates its own model and inputs.
     del trainDataLoader, validationDataLoader
     del detector, criterion, optimizer
     release_cuda_memory('training shutdown')
-
-
-def path_remake(path):
-    return path.replace(' ', '\ ').replace('(', '\(').replace(')', '\)').replace('&', '\&')
+    distributed_barrier(runtime)
+    is_main = runtime.is_main
+    finalize_distributed(runtime)
+    return is_main
 
 
 if __name__ == '__main__':
     args = parse_args()
-    main(args)
-
-    os.system('python test.py --gpu %s --seqlen %d --datapath %s --dataset %s --log_dir %s' % (
-            args.gpu, args.seqlen, path_remake(args.datapath), path_remake(args.dataset), path_remake(args.log_dir)))
+    if launch_with_torchrun_if_needed(
+        __file__, args.gpu, args.gpu_num
+    ):
+        raise SystemExit(0)
+    run_followup_test = main(args)
+    if run_followup_test and args.run_test_after_train:
+        test_command = [
+            sys.executable,
+            str(Path(BASE_DIR) / 'test.py'),
+            '--gpu',
+            parse_visible_devices(args.gpu)[0],
+            '--seqlen',
+            str(args.seqlen),
+            '--datapath',
+            args.datapath,
+            '--dataset',
+            args.dataset,
+            '--logpath',
+            args.savepath,
+            '--log_dir',
+            args.log_dir,
+            '--eval_chunk_rows',
+            str(args.eval_chunk_rows),
+        ]
+        subprocess.run(test_command, check=True, cwd=BASE_DIR)
 

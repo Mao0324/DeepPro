@@ -21,16 +21,21 @@ class ShootingRules(nn.Module):
             cache=True,
         )
         loc_len2 = 4
-        box2_map = np.ones(target_one.shape)
+        image_height, image_width = target_one.shape
+        box2_map = np.ones(target_one.shape, dtype=bool)
         target_coordinates = []
         for prop in props:
             pixel_coords = prop.coords
             target_coordinates.append(pixel_coords)
             for i_pixel in pixel_coords:
+                top = max(0, i_pixel[0] - loc_len2)
+                bottom = min(image_height, i_pixel[0] + loc_len2 + 1)
+                left = max(0, i_pixel[1] - loc_len2)
+                right = min(image_width, i_pixel[1] + loc_len2 + 1)
                 box2_map[
-                    i_pixel[0]-loc_len2:i_pixel[0]+loc_len2+1,
-                    i_pixel[1]-loc_len2:i_pixel[1]+loc_len2+1,
-                ] = 0
+                    top:bottom,
+                    left:right,
+                ] = False
         return target_coordinates, box2_map
 
     @staticmethod
@@ -46,13 +51,18 @@ class ShootingRules(nn.Module):
         thresholded[np.where(thresholded >= detect_threshold)] = 1
 
         loc_len1 = 1
+        image_height, image_width = thresholded.shape
         true_num = 0
         for pixel_coords in target_coordinates:
             true_flag = 0
             for i_pixel in pixel_coords:
+                top = max(0, i_pixel[0] - loc_len1)
+                bottom = min(image_height, i_pixel[0] + loc_len1 + 1)
+                left = max(0, i_pixel[1] - loc_len1)
+                right = min(image_width, i_pixel[1] + loc_len1 + 1)
                 target_area = thresholded[
-                    i_pixel[0]-loc_len1:i_pixel[0]+loc_len1+1,
-                    i_pixel[1]-loc_len1:i_pixel[1]+loc_len1+1,
+                    top:bottom,
+                    left:right,
                 ]
                 if target_area.sum() >= 1:
                     true_flag = 1
@@ -83,11 +93,16 @@ class ShootingRules(nn.Module):
                     -np.inf,
                     dtype=output_one.dtype,
                 )
+                image_height, image_width = output_one.shape
                 for target_index, pixel_coords in enumerate(target_coordinates):
                     for i_pixel in pixel_coords:
+                        top = max(0, i_pixel[0] - 1)
+                        bottom = min(image_height, i_pixel[0] + 2)
+                        left = max(0, i_pixel[1] - 1)
+                        right = min(image_width, i_pixel[1] + 2)
                         target_area = output_one[
-                            i_pixel[0]-1:i_pixel[0]+2,
-                            i_pixel[1]-1:i_pixel[1]+2,
+                            top:bottom,
+                            left:right,
                         ]
                         if target_area.size > 0:
                             target_peaks[target_index] = max(
@@ -102,7 +117,7 @@ class ShootingRules(nn.Module):
 
                 # Sorting once is equivalent to thresholding and counting the
                 # false-alarm region 27 times, but avoids 27 full image copies.
-                false_values = np.sort(output_one[box2_map != 0].reshape(-1))
+                false_values = np.sort(output_one[box2_map].reshape(-1))
                 false_numbers += false_values.size - np.searchsorted(
                     false_values,
                     thresholds,
@@ -133,5 +148,4 @@ class ShootingRules(nn.Module):
             int(true_numbers[0]),
             int(target_numbers[0]),
         )
-
 

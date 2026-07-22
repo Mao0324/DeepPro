@@ -15,6 +15,11 @@ from data_utils.loader_utils import (
 )
 
 
+NEAREST_RESAMPLE = (
+    Image.Resampling.NEAREST if hasattr(Image, 'Resampling') else Image.NEAREST
+)
+
+
 class LazySequenceWindow:
     """Store a temporal window without duplicating every frame path."""
 
@@ -60,6 +65,10 @@ class LazySequenceWindow:
 
 class TrainSeqDataLoader(Dataset):
     def __init__(self, dataset, data_root, samplelist, sample_p, seq_len=100, sample_rate=0.1, patch_size=None, transform=None):
+        if not samplelist:
+            raise ValueError('Training sample list must not be empty.')
+        if not 0 < sample_rate <= 1:
+            raise ValueError('sample_rate must satisfy 0 < sample_rate <= 1.')
         self.data_root = data_root
         self.samplelist = samplelist
         self.sample_p = sample_p
@@ -89,7 +98,7 @@ class TrainSeqDataLoader(Dataset):
             self.train_std = 12.303
 
     def __len__(self):
-        return int(len(self.samplelist) * self.sample_rate)
+        return max(1, int(len(self.samplelist) * self.sample_rate))
 
     def get_image_label(self, image_path, label_path):
         with Image.open(image_path) as image_file:
@@ -106,9 +115,13 @@ class TrainSeqDataLoader(Dataset):
 
         with Image.open(label_path) as label_file:
             if 'NUDT-MIRSDT' in self.dataset:
-                label_file = label_file.resize([256, 256])
+                label_file = label_file.resize(
+                    [256, 256], resample=NEAREST_RESAMPLE
+                )
             elif self.dataset == 'IRSatVideo-LEO':
-                label_file = label_file.resize([512, 512])
+                label_file = label_file.resize(
+                    [512, 512], resample=NEAREST_RESAMPLE
+                )
             # elif self.dataset == 'RGB-T':
             #     label_file = label_file.resize([480, 480])
             label = np.array(label_file, dtype=np.float32) / 255.

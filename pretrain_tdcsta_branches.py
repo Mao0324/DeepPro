@@ -12,6 +12,7 @@ import numpy as np
 from tqdm import tqdm
 
 from data_utils.TrainDataLoader import TrainIRSeqDataLoader
+from runtime_utils import atomic_torch_save, parse_visible_devices
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(BASE_DIR, "networks/models"))
@@ -76,8 +77,13 @@ def parse_args():
 
 
 def main(args):
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
-    save_dir = Path(args.save_dir)
+    visible_devices = parse_visible_devices(args.gpu)
+    if len(visible_devices) != 1:
+        raise ValueError('Branch pretraining requires exactly one GPU.')
+    if args.batch_size <= 0 or args.epoch <= 0 or args.num_workers < 0:
+        raise ValueError('batch_size/epoch must be positive and workers non-negative.')
+    os.environ["CUDA_VISIBLE_DEVICES"] = visible_devices[0]
+    save_dir = Path(args.save_dir).expanduser().resolve()
     save_dir.mkdir(parents=True, exist_ok=True)
 
     dataset = TrainIRSeqDataLoader(
@@ -99,6 +105,10 @@ def main(args):
         worker_init_fn=lambda x: np.random.seed(x),
     )
 
+    models_dir = (Path(BASE_DIR) / 'networks' / 'models').resolve()
+    model_path = (models_dir / ('%s.py' % args.model)).resolve()
+    if model_path.parent != models_dir or not model_path.is_file():
+        raise ValueError('Unknown or unsafe model name: %s' % args.model)
     MODEL = importlib.import_module(args.model)
     front = MODEL.TDCSTAFront(dim=32)
 
@@ -110,9 +120,13 @@ def main(args):
         default_save_name = "st_branch.pth"
 
     save_name = args.save_name if args.save_name is not None else default_save_name
-    save_path = save_dir / save_name
+    save_path = (save_dir / save_name).resolve()
+    try:
+        save_path.relative_to(save_dir)
+    except ValueError as error:
+        raise ValueError('--save_name must stay inside %s.' % save_dir) from error
     if save_path.exists() and not args.overwrite:
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         save_path = save_path.with_name(f"{save_path.stem}_{timestamp}{save_path.suffix}")
 
     net = net.cuda()
@@ -160,7 +174,7 @@ def main(args):
         if avg_loss < best_loss:
             best_loss = avg_loss
             best_epoch = epoch
-            torch.save(
+            atomic_torch_save(
                 {
                     "epoch": epoch,
                     "stage": args.stage,

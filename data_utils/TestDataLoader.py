@@ -14,6 +14,11 @@ from data_utils.loader_utils import (
 )
 
 
+NEAREST_RESAMPLE = (
+    Image.Resampling.NEAREST if hasattr(Image, 'Resampling') else Image.NEAREST
+)
+
+
 class TestSeqDataLoader(Dataset):
     def __init__(
         self,
@@ -66,6 +71,10 @@ class TestSeqDataLoader(Dataset):
             return image, None, None
 
         with Image.open(label_path) as label_file:
+            if self.dataset == 'IRSatVideo-LEO':
+                label_file = label_file.resize(
+                    [512, 512], resample=NEAREST_RESAMPLE
+                )
             label = np.array(label_file, dtype=np.float32) / 255.
         if label.ndim == 3:
             label = label[:,:,0]
@@ -74,6 +83,10 @@ class TestSeqDataLoader(Dataset):
 
         if 'NUDT-MIRSDT' in self.dataset:
             with Image.open(centroid_path) as centroid_file:
+                if self.dataset == 'IRSatVideo-LEO':
+                    centroid_file = centroid_file.resize(
+                        [512, 512], resample=NEAREST_RESAMPLE
+                    )
                 centroid = np.array(centroid_file, dtype=np.float32) / 255.
             centroid = np.expand_dims(centroid, axis=0)
         else:

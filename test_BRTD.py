@@ -3,7 +3,7 @@ Author: Benny
 Date: Nov 2019
 """
 import argparse
-import builtins
+import inspect
 import os
 from data_utils.TestDataLoader import TestIRSeqDataLoader
 import torch
@@ -13,16 +13,13 @@ import sys
 import importlib
 from tqdm import tqdm
 import numpy as np
-from numpy import *
 import time
 from PIL import Image
 import cv2
-import scipy.io as scio
 import torch.nn.functional as F
-from ShootingRules_v2 import ShootingRules
-from sklearn.metrics import auc
-from collections import OrderedDict
-from sequence_utils import SequenceAccumulator
+from ShootingRules import ShootingRules
+from sequence_utils import SequenceAccumulator, frame_range_length
+from runtime_utils import load_checkpoint, parse_visible_devices
 # from attribution.core import IR_Integrated_gradient, MeanLinearPath, ZeroLinearPath
 from write_results import writeNUDTMIRSDT_ROC, writeMIRST_ROC
 
@@ -54,14 +51,12 @@ def parse_args():
                         help='Use CUDA automatic mixed precision [default: 0]')
     parser.add_argument('--eval_chunk_rows', type=int, default=None,
                         help='Override checkpoint eval row chunking; 0 disables it')
+    parser.add_argument('--overwrite_outputs', action='store_true', default=False)
     return parser.parse_args()
 
 
 def count_parameters(model):
-    # ``from numpy import *`` shadows Python's built-in sum with np.sum.
-    # Use the built-in explicitly so a generator is consumed without NumPy's
-    # deprecated generator coercion.
-    total_bytes = builtins.sum(
+    total_bytes = sum(
         p.numel() * p.element_size() for p in model.parameters()
     )
     return total_bytes / (1000 ** 2)  # MB (十进制)
@@ -73,7 +68,10 @@ def main(args):
         print(str)
 
     '''HYPER PARAMETER'''
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+    visible_devices = parse_visible_devices(args.gpu)
+    if len(visible_devices) != 1:
+        raise ValueError('test_BRTD.py requires exactly one GPU.')
+    os.environ["CUDA_VISIBLE_DEVICES"] = visible_devices[0]
     if args.batch_size != 1:
         raise ValueError('test_BRTD.py only supports --batch_size 1.')
     if args.attribution:
@@ -81,9 +79,25 @@ def main(args):
             '--attribution is unavailable because its implementation is commented out.'
         )
 
-    experiment_dir = Path(args.logpath) / 'sem_seg' / args.log_dir
+    experiment_root = Path(args.logpath).expanduser().resolve() / 'sem_seg'
+    experiment_dir = (experiment_root / args.log_dir).resolve()
+    try:
+        experiment_dir.relative_to(experiment_root)
+    except ValueError as error:
+        raise ValueError('--log_dir must be under %s.' % experiment_root) from error
+    if not experiment_dir.is_dir():
+        raise FileNotFoundError(experiment_dir)
     if args.visual:
         visual_dir = experiment_dir / 'visual'
+        if (
+            visual_dir.exists()
+            and any(visual_dir.iterdir())
+            and not args.overwrite_outputs
+        ):
+            raise FileExistsError(
+                'Visual directory is not empty: %s. Pass --overwrite_outputs '
+                'only when replacement is intentional.' % visual_dir
+            )
         visual_dir.mkdir(exist_ok=True, parents=True)
 
     '''LOG'''
@@ -114,7 +128,7 @@ def main(args):
         checkpoint_path = experiment_dir / 'checkpoints' / 'best_model.pth'
     else:
         checkpoint_path = experiment_dir / 'checkpoints' / ('epoch_%d_model.pth' % args.epoch)
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    checkpoint = load_checkpoint(checkpoint_path, map_location='cpu')
     model_name = checkpoint.get('model_name')
     if model_name is None:
         log_files = sorted((experiment_dir / 'logs').glob('*.txt'))
@@ -123,12 +137,24 @@ def main(args):
                 'Checkpoint has no model_name and exactly one model log could not be identified.'
             )
         model_name = log_files[0].stem
-    sys.path.append(str(experiment_dir))
+    model_path = (experiment_dir / ('%s.py' % model_name)).resolve()
+    if model_path.parent != experiment_dir or not model_path.is_file():
+        raise ValueError('Unsafe or missing model snapshot: %s' % model_name)
+    sys.path.insert(0, str(experiment_dir))
     MODEL = importlib.import_module(model_name)
-    model_config = checkpoint.get('model_config', {})
+    constructor_parameters = inspect.signature(MODEL.detector).parameters
+    model_config = {
+        key: value for key, value in checkpoint.get('model_config', {}).items()
+        if key in constructor_parameters
+        and key not in {'spatial_ckpt', 'st_ckpt'}
+    }
     if args.eval_chunk_rows is not None:
         model_config = dict(model_config)
-        model_config['eval_chunk_rows'] = args.eval_chunk_rows
+        if 'eval_chunk_rows' not in constructor_parameters:
+            if args.eval_chunk_rows:
+                raise ValueError('%s does not support eval chunking.' % model_name)
+        else:
+            model_config['eval_chunk_rows'] = args.eval_chunk_rows
     detector = MODEL.detector(
         NUM_CLASSES,
         SEQ_LEN,
@@ -147,13 +173,13 @@ def main(args):
         for key, value in checkpoint['model_state_dict'].items()
     }
     detector.load_state_dict(state_dict)
+    del checkpoint, state_dict
     detector.eval()
-    eval = ShootingRules()
+    evaluator = ShootingRules()
 
-    with torch.no_grad():
+    with torch.inference_mode():
         num_batches = 0
-        total_intersection_mid = 0
-        total_union_mid = 0
+        metric_counts = torch.zeros(2, device='cuda', dtype=torch.int64)
 
         Th_Seg = np.array([0, 1e-20, 1e-10, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0.2, 0.3, .35, 0.4,
                            .45, 0.5, .55, 0.6, .65, 0.7, 0.8, 0.85, 0.9, 0.95, 0.99, 1])
@@ -198,67 +224,86 @@ def main(args):
             num_batches += len(seq_dataloader)
             accumulator = SequenceAccumulator()
             for i, (images, targets, centroids, first_end) in enumerate(seq_dataloader):
-                images, targets = images.float().cuda(), targets.float().cuda()
-                first_frame, end_frame = first_end
-
-                if args.attribution:
-                    paths = [os.path.join(TEST_DATASET.seq_names[seq_idx], '%05d.png' % (fi+1))
-                             for fi in range(first_frame, end_frame+1)]
-                    savepath = os.path.join(experiment_dir, 'Attribution_ZeroLinearPath_0.1')
-                    # seq_midpred = IR_Integrated_gradient(images, targets, (paths, args.dataset, savepath), detector, path_interpolation_func)
-
-                else:
-                    with torch.cuda.amp.autocast(enabled=bool(args.amp)):
-                        _, seq_midpred = detector(images)   ## b, t, h, w
-                    if seq_midpred.shape[-2:] != targets.shape[-2:]:
-                        seq_midpred = F.interpolate(seq_midpred, size=targets.shape[-2:])
-                    accumulator.add(
-                        torch.sigmoid(seq_midpred).cpu(),
-                        targets.cpu(),
-                        first_end,
-                        centroids,
+                images = images.float().cuda(non_blocking=True)
+                targets = targets.float().cuda(non_blocking=True)
+                with torch.cuda.amp.autocast(enabled=bool(args.amp)):
+                    sequence_features, seq_midpred = detector(images)
+                    del sequence_features
+                if seq_midpred.shape[-2:] != targets.shape[-2:]:
+                    seq_midpred = F.interpolate(
+                        seq_midpred,
+                        size=targets.shape[-2:],
+                        mode='bilinear',
+                        align_corners=False,
                     )
-                    del images, targets, seq_midpred
-                    torch.cuda.empty_cache()
+                valid_length = frame_range_length(first_end)
+                accumulator.add(
+                    torch.sigmoid(seq_midpred[:, :valid_length]),
+                    targets[:, :valid_length],
+                    first_end,
+                    centroids[:, :valid_length],
+                )
+                del images, targets, seq_midpred, centroids
 
-            if not args.attribution:
+            if accumulator.predictions is not None:
                 seq_midpred_all = accumulator.predictions
                 targets_all = accumulator.targets
                 centroids_all = accumulator.centroids
                 ############### for IoU ###############
-                pred_choice_mid = (seq_midpred_all.numpy() > args.threshold_eval) * 1.
-                batch_label     = targets_all.numpy()
-                total_intersection_mid += np.sum(pred_choice_mid * batch_label)
-                total_union_mid += ((pred_choice_mid + batch_label) > 0).astype(np.float32).sum()
+                pred_choice_mid = seq_midpred_all.gt(args.threshold_eval)
+                batch_label = targets_all.gt(0)
+                metric_counts[0] += torch.logical_and(
+                    pred_choice_mid, batch_label
+                ).sum(dtype=torch.int64)
+                metric_counts[1] += torch.logical_or(
+                    pred_choice_mid, batch_label
+                ).sum(dtype=torch.int64)
+                seq_midpred_cpu = seq_midpred_all.cpu().numpy()
+                centroids_cpu = centroids_all.numpy()
+                del seq_midpred_all, targets_all, centroids_all
+                del accumulator, pred_choice_mid, batch_label
 
                 ############### for Pd&Fa ###############
-                _, t, h, w = seq_midpred_all.size()
+                _, t, h, w = seq_midpred_cpu.shape
                 pixelsNumber[seq_idx] += t * h * w
                 for ti in range(t):
-                    midpred_ti = seq_midpred_all[:, ti, :, :].numpy().copy()
-                    centroid_ti  = centroids_all[:, ti, :, :].numpy().copy()
+                    midpred_ti = seq_midpred_cpu[:, ti, :, :]
+                    centroid_ti = centroids_cpu[:, ti, :, :]
                     if midpred_ti.shape[-2:] != centroid_ti.shape[-2:]:
                         h, w = centroid_ti.shape[-2:]
                         midpred_ti = cv2.resize(midpred_ti[0, :, :], (w, h))[None, :, :]
-                    for th_i in range(len(Th_Seg)):
-                        FalseNum, TrueNum, TgtNum = eval(midpred_ti, centroid_ti, Th_Seg[th_i])
-                        FalseNumAll[seq_idx, th_i] = FalseNumAll[seq_idx, th_i] + FalseNum
-                        TrueNumAll[seq_idx, th_i]  = TrueNumAll[seq_idx, th_i] + TrueNum
-                        TgtNumAll[seq_idx, th_i]   = TgtNumAll[seq_idx, th_i] + TgtNum
+                    false_numbers, true_numbers, target_numbers = (
+                        evaluator.evaluate_thresholds(
+                            midpred_ti,
+                            centroid_ti,
+                            Th_Seg,
+                        )
+                    )
+                    FalseNumAll[seq_idx, :] += false_numbers
+                    TrueNumAll[seq_idx, :] += true_numbers
+                    TgtNumAll[seq_idx, :] += target_numbers
 
                     ############### save results ###############
                     if args.visual:
-                        midpred_ti_png = Image.fromarray(uint8(midpred_ti.squeeze(0) * 255))
+                        midpred_ti_png = Image.fromarray(
+                            np.uint8(midpred_ti.squeeze(0) * 255)
+                        )
                         plus1 = 0 if args.dataset == 'RGB-T' else 1
                         png_name = '%05d.png' % (ti+1*plus1)
                         seq_dir = Path(os.path.join(visual_dir, TEST_DATASET.seq_names[seq_idx]))
                         seq_dir.mkdir(exist_ok=True)
                         midpred_ti_png.save(os.path.join(seq_dir, png_name))
                         # scio.savemat(os.path.join(seq_dir, '%05d.mat' % (ti+1*plus1)), {'TestOut': midpred_ti.squeeze(0)})
+                del seq_midpred_cpu, centroids_cpu
 
         time_end = time.time()
+        log_string(
+            'Evaluation elapsed time: %.2f seconds for %d windows.'
+            % (time_end - time_start, num_batches)
+        )
         # print('FPS=%.3f' % (2000*1.2 / (time_end - time_start)))
         ############### log Pd&Fa results ###############
+        total_intersection_mid, total_union_mid = metric_counts.tolist()
         if not args.attribution:
             if 'NUDT-MIRSDT' in args.dataset:
                 writeNUDTMIRSDT_ROC(FalseNumAll, TrueNumAll, TgtNumAll, pixelsNumber, total_intersection_mid,
