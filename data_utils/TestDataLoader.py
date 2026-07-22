@@ -15,12 +15,21 @@ from data_utils.loader_utils import (
 
 
 class TestSeqDataLoader(Dataset):
-    def __init__(self, dataset, data_root, samplelist, seq_len=100, transform=None):
+    def __init__(
+        self,
+        dataset,
+        data_root,
+        samplelist,
+        seq_len=100,
+        transform=None,
+        load_annotations=True,
+    ):
         self.dataset = dataset
         self.data_root = data_root
         self.samplelist = samplelist
         self.seq_len = seq_len
         self.transform = transform
+        self.load_annotations = load_annotations
         if 'NUDT-MIRSDT' in dataset:
             self.train_mean = 105.4025
             self.train_std = 26.6452
@@ -52,6 +61,9 @@ class TestSeqDataLoader(Dataset):
         if image.ndim == 3:
             image = image[:,:,0]
         image = np.expand_dims(np.expand_dims(image, axis=0), axis=0)
+
+        if not self.load_annotations:
+            return image, None, None
 
         with Image.open(label_path) as label_file:
             label = np.array(label_file, dtype=np.float32) / 255.
@@ -87,17 +99,18 @@ class TestSeqDataLoader(Dataset):
             [1, len(sample), h, w],
             dtype=image.dtype,
         )
-        labels = np.empty(
-            [len(sample), h, w],
-            dtype=label.dtype,
-        )
-        centroids = np.empty(
-            [len(sample), h, w],
-            dtype=centroid.dtype,
-        )
         images[:, 0:1, :, :] = image
-        labels[0:1, :, :] = label
-        centroids[0:1, :, :] = centroid
+        if self.load_annotations:
+            labels = np.empty(
+                [len(sample), h, w],
+                dtype=label.dtype,
+            )
+            centroids = np.empty(
+                [len(sample), h, w],
+                dtype=centroid.dtype,
+            )
+            labels[0:1, :, :] = label
+            centroids[0:1, :, :] = centroid
 
         for i in range(1, len(sample)):
             image_path, label_path, _, centroid_path = sample[i]
@@ -107,29 +120,35 @@ class TestSeqDataLoader(Dataset):
                 centroid_path,
             )
             images[:, i:i+1, :, :] = image
-            labels[i:i+1, :, :] = label
-            centroids[i:i+1, :, :] = centroid
+            if self.load_annotations:
+                labels[i:i+1, :, :] = label
+                centroids[i:i+1, :, :] = centroid
 
         images = (images - self.train_mean) / self.train_std
-        t = labels.shape[0]
+        t = len(sample)
         if t < self.seq_len:
             padding = self.seq_len - t
             images = np.concatenate((images, np.zeros(
                 [1, padding, h, w], dtype=images.dtype
             )), axis=1)
-            labels = np.concatenate((labels, np.zeros(
-                [padding, h, w], dtype=labels.dtype
-            )), axis=0)
-            centroids = np.concatenate((centroids, np.zeros(
-                [padding, h, w], dtype=centroids.dtype
-            )), axis=0)
+            if self.load_annotations:
+                labels = np.concatenate((labels, np.zeros(
+                    [padding, h, w], dtype=labels.dtype
+                )), axis=0)
+                centroids = np.concatenate((centroids, np.zeros(
+                    [padding, h, w], dtype=centroids.dtype
+                )), axis=0)
 
         # if self.transform is not None:
         #     sample = self.transform(sample)   #########################
 
         images = torch.from_numpy(images)
-        labels = torch.from_numpy(labels)
-        centroids = torch.from_numpy(centroids)
+        if self.load_annotations:
+            labels = torch.from_numpy(labels)
+            centroids = torch.from_numpy(centroids)
+        else:
+            labels = torch.empty(0, dtype=images.dtype)
+            centroids = torch.empty(0, dtype=images.dtype)
         # labels = 0
         # centroids = 0
 
@@ -143,7 +162,15 @@ class TestSeqDataLoader(Dataset):
 
 
 class TestIRSeqDataLoader(object):
-    def __init__(self, dataset='NUDT-MIRSDT', data_root='./datasets/IRSeq', seq_len=100, cat_len=10, transform=None):
+    def __init__(
+        self,
+        dataset='NUDT-MIRSDT',
+        data_root='./datasets/IRSeq',
+        seq_len=100,
+        cat_len=10,
+        transform=None,
+        load_annotations=True,
+    ):
         if seq_len <= 0:
             raise ValueError('seq_len must be positive.')
         if cat_len < 0 or cat_len >= seq_len:
@@ -153,6 +180,7 @@ class TestIRSeqDataLoader(object):
         self.seq_len = seq_len
         self.cat_len = cat_len
         self.transform = transform
+        self.load_annotations = load_annotations
         if dataset == SATVIDEO_V1_DATASET:
             self.seq_list_file = None
             self.seq_names = discover_split_sequences(data_root, 'val')
@@ -255,7 +283,14 @@ class TestIRSeqDataLoader(object):
                       for x in range(max(0, last_frame-self.seq_len), last_frame)]
             samplelist.extend([sample])
 
-        seq_dataset = TestSeqDataLoader(self.dataset, self.data_root, samplelist, self.seq_len, self.transform)
+        seq_dataset = TestSeqDataLoader(
+            self.dataset,
+            self.data_root,
+            samplelist,
+            self.seq_len,
+            self.transform,
+            load_annotations=self.load_annotations,
+        )
 
         return seq_dataset
 
@@ -270,6 +305,7 @@ class TestIRSeqDataLoader(object):
             samplelist,
             self.seq_len,
             self.transform,
+            load_annotations=self.load_annotations,
         )
 
     def _check_preprocess(self):
