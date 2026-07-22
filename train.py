@@ -46,6 +46,17 @@ def seed_everything(seed=46):
     torch.backends.cudnn.benchmark = False
 
 
+def multiprocessing_loader_options(worker_count, prefetch_factor):
+    """Return DataLoader options that are valid with and without workers."""
+    options = {'num_workers': worker_count}
+    if worker_count > 0:
+        options.update({
+            'persistent_workers': True,
+            'prefetch_factor': prefetch_factor,
+        })
+    return options
+
+
 def parse_args():
     parser = argparse.ArgumentParser('Model')
     parser.add_argument('--model', type=str, default='DeepPro-Plus', help='model name [default: pointnet_sem_seg]')
@@ -68,6 +79,12 @@ def parse_args():
                                                                      '0.03(IRDST), 0.05(RGB-T), 0.04(SatVideoIRSDT)]')
     parser.add_argument('--lr_decay', type=float, default=0.7, help='Decay rate for lr decay [default: 0.7]')
     parser.add_argument('--threshold_eval', type=float, default=0.5, help='Threshold in evaluation [default: 0.5]')
+    parser.add_argument('--train_workers', type=int, default=8,
+                        help='Persistent DataLoader workers used for training [default: 8]')
+    parser.add_argument('--val_workers', type=int, default=4,
+                        help='Persistent DataLoader workers used for validation [default: 4]')
+    parser.add_argument('--prefetch_factor', type=int, default=2,
+                        help='Batches prefetched by each DataLoader worker [default: 2]')
     parser.add_argument('--use_swanlab', type=int, default=1, choices=[0, 1], help='Use SwanLab logging [default: 1]')
     parser.add_argument('--swanlab_project', type=str, default='DeepPro', help='SwanLab project name')
     parser.add_argument("--spatial_ckpt", type=str, default="")
@@ -105,6 +122,10 @@ def main(args):
         )
 
     '''HYPER PARAMETER'''
+    if args.train_workers < 0 or args.val_workers < 0:
+        raise ValueError('DataLoader worker counts must be non-negative.')
+    if args.prefetch_factor <= 0:
+        raise ValueError('prefetch_factor must be positive.')
     if args.gpu_num == 1:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
     else:
@@ -163,21 +184,37 @@ def main(args):
                                          patch_size=args.patch_size, transform=None)  # sample_rate=0.1, 0.03, 0.05
     print("start loading test data ...")
     TEST_DATASET  = TestIRSeqDataLoader(args.dataset, data_root=root,  seq_len=SEQ_LEN, cat_len=int(SEQ_LEN*0.1), transform=None)
+    VALIDATION_DATASET = TEST_DATASET.flatten_windows()
 
     trainDataLoader = torch.utils.data.DataLoader(
         TRAIN_DATASET,
         batch_size=BATCH_SIZE,
         shuffle=True,
-        num_workers=4,
         pin_memory=True,
-        persistent_workers=True,
-        prefetch_factor=1,
         drop_last=True,
-        worker_init_fn=lambda x: np.random.seed(x + int(time.time()))
+        worker_init_fn=lambda x: np.random.seed(x + int(time.time())),
+        **multiprocessing_loader_options(
+            args.train_workers,
+            args.prefetch_factor,
+        )
+    )
+    validationDataLoader = torch.utils.data.DataLoader(
+        VALIDATION_DATASET,
+        batch_size=1,
+        shuffle=False,
+        pin_memory=True,
+        **multiprocessing_loader_options(
+            args.val_workers,
+            args.prefetch_factor,
+        )
     )
 
     log_string("The number of training data is: %d" % len(TRAIN_DATASET))
     log_string("The number of test data is: %d sequences" % len(TEST_DATASET))
+    log_string(
+        "DataLoader workers: train=%d, validation=%d, prefetch_factor=%d"
+        % (args.train_workers, args.val_workers, args.prefetch_factor)
+    )
 
     '''MODEL LOADING'''
     MODEL = importlib.import_module(args.model)
@@ -250,9 +287,16 @@ def main(args):
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
         num_batches = len(trainDataLoader)
-        total_intersection_mid = 0
-        total_union_mid = 0
-        loss_sum = 0
+        metric_device = next(detector.parameters()).device
+        total_intersection_mid = torch.zeros(
+            (), device=metric_device, dtype=torch.int64
+        )
+        total_union_mid = torch.zeros(
+            (), device=metric_device, dtype=torch.int64
+        )
+        loss_sum = torch.zeros(
+            (), device=metric_device, dtype=torch.float64
+        )
         detector.train()
 
         for i, (images, targets) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
@@ -267,23 +311,36 @@ def main(args):
             loss.backward()
             optimizer.step()
 
-            seq_midpred = torch.sigmoid(seq_midpred.detach())
-            midpred_choice = (seq_midpred.cpu().data.numpy() > args.threshold_eval) * 1.
-            batch_label    = targets.cpu().data.numpy()
-            total_intersection_mid += np.sum(midpred_choice * batch_label)
-            total_union_mid += ((midpred_choice + batch_label)>0).astype(np.float32).sum()
-            loss_sum += loss.item()
+            with torch.no_grad():
+                midpred_choice = torch.sigmoid(seq_midpred.detach()).gt(
+                    args.threshold_eval
+                )
+                batch_label = targets.gt(0)
+                total_intersection_mid += torch.logical_and(
+                    midpred_choice,
+                    batch_label,
+                ).sum(dtype=torch.int64)
+                total_union_mid += torch.logical_or(
+                    midpred_choice,
+                    batch_label,
+                ).sum(dtype=torch.int64)
+                loss_sum += loss.detach().to(torch.float64)
             # break
 
         # The last training batch and its gradients otherwise remain alive
         # throughout validation because Python blocks do not create a scope.
         optimizer.zero_grad(set_to_none=True)
+        train_loss = (loss_sum / num_batches).item()
+        train_iou = (
+            total_intersection_mid.to(torch.float64)
+            / total_union_mid.to(torch.float64)
+        ).item()
+
         del images, targets, seq_midpred, loss
         del midpred_choice, batch_label
+        del total_intersection_mid, total_union_mid, loss_sum
         release_cuda_memory('training cleanup')
 
-        train_loss = loss_sum / num_batches
-        train_iou = total_intersection_mid / total_union_mid
         log_string('Training mean loss: %f' % train_loss)
         log_string('Training accuracy (IoU) of prediction: %f' % train_iou)
         if swanlab_run is not None:
@@ -315,48 +372,56 @@ def main(args):
 
         '''Evaluate'''
         with torch.inference_mode():
-            num_batches = 0
-            total_intersection_mid = 0
-            total_union_mid = 0
-            loss_g_sum = 0
+            num_batches = len(validationDataLoader)
+            total_intersection_mid = torch.zeros(
+                (), device=metric_device, dtype=torch.int64
+            )
+            total_union_mid = torch.zeros(
+                (), device=metric_device, dtype=torch.int64
+            )
+            loss_g_sum = torch.zeros(
+                (), device=metric_device, dtype=torch.float64
+            )
             detector.eval()
 
             log_string('---- EPOCH %03d EVALUATION ----' % (global_epoch + 1))
-            # for i, (images, targets) in tqdm(enumerate(testDataLoader), total=len(testDataLoader), smoothing=0.9):
-            for seq_idx, seq_dataset in tqdm(enumerate(TEST_DATASET), total=len(TEST_DATASET), smoothing=0.9):
-                # if seq_idx % 3 > 0:
-                #     continue
-                seq_dataloader = torch.utils.data.DataLoader(
-                    seq_dataset,
-                    batch_size=1,
-                    shuffle=False,
-                    num_workers=0,
-                    pin_memory=False,
+            for images, targets, _, _ in tqdm(
+                validationDataLoader,
+                total=num_batches,
+                smoothing=0.9,
+            ):
+                images = images.float().cuda(non_blocking=True)
+                targets = targets.float().cuda(non_blocking=True)
+
+                _, seq_midpred = detector(images)
+                if seq_midpred.shape[-1] != targets.shape[-1]:
+                    seq_midpred = F.interpolate(
+                        seq_midpred,
+                        size=targets.shape[-2:],
+                    )
+
+                loss_g_sum += criterion(seq_midpred, targets).to(torch.float64)
+                pred_choice_mid = torch.sigmoid(seq_midpred).gt(
+                    args.threshold_eval
                 )
-                num_batches += len(seq_dataloader)
-                for i, (images, targets, _, first_end) in enumerate(seq_dataloader):
-                    images, targets = images.float().cuda(), targets.float().cuda()
+                batch_label = targets.gt(0)
+                total_intersection_mid += torch.logical_and(
+                    pred_choice_mid,
+                    batch_label,
+                ).sum(dtype=torch.int64)
+                total_union_mid += torch.logical_or(
+                    pred_choice_mid,
+                    batch_label,
+                ).sum(dtype=torch.int64)
 
-                    _, seq_midpred = detector(images)
-                    if seq_midpred.shape[-1] != targets.shape[-1]:
-                        seq_midpred = F.interpolate(seq_midpred, size=targets.shape[-2:])
-
-                    loss_g_sum += criterion(seq_midpred, targets).item()
-
-                    seq_midpred = torch.sigmoid(seq_midpred)
-                    pred_choice_mid = (seq_midpred.cpu().data.numpy() > args.threshold_eval) * 1.
-                    batch_label     = targets.cpu().data.numpy()
-                    total_intersection_mid += np.sum(pred_choice_mid * batch_label)
-                    total_union_mid += ((pred_choice_mid + batch_label) > 0).astype(np.float32).sum()
-
-                # Do not retain the last, potentially full-resolution, batch
-                # while constructing the next sequence loader.
-                del images, targets, seq_midpred
-                del pred_choice_mid, batch_label
-                del seq_dataloader
-
-            mIoU_mid = total_intersection_mid / total_union_mid
-            eval_loss = loss_g_sum / float(num_batches)
+            mIoU_mid = (
+                total_intersection_mid.to(torch.float64)
+                / total_union_mid.to(torch.float64)
+            ).item()
+            eval_loss = (loss_g_sum / num_batches).item()
+            del images, targets, seq_midpred
+            del pred_choice_mid, batch_label
+            del total_intersection_mid, total_union_mid, loss_g_sum
             log_string('Eval mean loss: %f' % eval_loss)
             log_string('Eval avg class IoU of prediction: %f' % (mIoU_mid))
 
@@ -399,7 +464,7 @@ def main(args):
     # main() is followed by a separate test.py process. Explicit teardown is
     # required so the parent process does not keep CUDA cache while the child
     # allocates its own model and inputs.
-    del trainDataLoader
+    del trainDataLoader, validationDataLoader
     del detector, criterion, optimizer
     release_cuda_memory('training shutdown')
 

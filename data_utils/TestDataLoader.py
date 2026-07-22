@@ -45,24 +45,24 @@ class TestSeqDataLoader(Dataset):
         return len(self.samplelist)
 
     def get_image_label(self, image_path, label_path, centroid_path=None):
-        image = Image.open(image_path)
-        if self.dataset == 'IRSatVideo-LEO':
-            image = image.resize([512, 512])
-        image = np.array(image, dtype=np.float32)
+        with Image.open(image_path) as image_file:
+            if self.dataset == 'IRSatVideo-LEO':
+                image_file = image_file.resize([512, 512])
+            image = np.array(image_file, dtype=np.float32)
         if image.ndim == 3:
             image = image[:,:,0]
         image = np.expand_dims(np.expand_dims(image, axis=0), axis=0)
 
-        label = Image.open(label_path)
-        label = np.array(label, dtype=np.float32) / 255.
+        with Image.open(label_path) as label_file:
+            label = np.array(label_file, dtype=np.float32) / 255.
         if label.ndim == 3:
             label = label[:,:,0]
         label[label > 0] = 1.
         label = np.expand_dims(label, axis=0)
 
         if 'NUDT-MIRSDT' in self.dataset:
-            centroid = Image.open(centroid_path)
-            centroid = np.array(centroid, dtype=np.float32) / 255.
+            with Image.open(centroid_path) as centroid_file:
+                centroid = np.array(centroid_file, dtype=np.float32) / 255.
             centroid = np.expand_dims(centroid, axis=0)
         else:
             centroid = label
@@ -71,26 +71,47 @@ class TestSeqDataLoader(Dataset):
 
     def sample_sequence(self, idx):
         sample = self.samplelist[idx]   ## frame：各帧在序列中的顺序（0开始）
+        if len(sample) == 0:
+            raise ValueError('Validation sample must contain at least one frame.')
         first_frame = sample[0][2]
         end_frame = sample[-1][2]
-        for i in range(len(sample)):
-            image_path, label_path, frame, centroid_path = sample[i]
+
+        image_path, label_path, _, centroid_path = sample[0]
+        image, label, centroid = self.get_image_label(
+            image_path,
+            label_path,
+            centroid_path,
+        )
+        _, _, h, w = image.shape
+        images = np.empty(
+            [1, len(sample), h, w],
+            dtype=image.dtype,
+        )
+        labels = np.empty(
+            [len(sample), h, w],
+            dtype=label.dtype,
+        )
+        centroids = np.empty(
+            [len(sample), h, w],
+            dtype=centroid.dtype,
+        )
+        images[:, 0:1, :, :] = image
+        labels[0:1, :, :] = label
+        centroids[0:1, :, :] = centroid
+
+        for i in range(1, len(sample)):
+            image_path, label_path, _, centroid_path = sample[i]
             image, label, centroid = self.get_image_label(
                 image_path,
                 label_path,
                 centroid_path,
             )
-            if i == 0:
-                images = image
-                labels = label
-                centroids = centroid
-            else:
-                images = np.concatenate((images, image), axis=1)            ## [c, t, h, w]
-                labels = np.concatenate((labels, label), axis=0)            ## [t, h, w]
-                centroids = np.concatenate((centroids, centroid), axis=0)   ## [t, h, w]
+            images[:, i:i+1, :, :] = image
+            labels[i:i+1, :, :] = label
+            centroids[i:i+1, :, :] = centroid
 
         images = (images - self.train_mean) / self.train_std
-        t, h, w = labels.shape
+        t = labels.shape[0]
         if t < self.seq_len:
             padding = self.seq_len - t
             images = np.concatenate((images, np.zeros(
@@ -237,6 +258,19 @@ class TestIRSeqDataLoader(object):
         seq_dataset = TestSeqDataLoader(self.dataset, self.data_root, samplelist, self.seq_len, self.transform)
 
         return seq_dataset
+
+    def flatten_windows(self):
+        """Build one deterministic window dataset for persistent validation workers."""
+        samplelist = []
+        for seq_idx in range(len(self)):
+            samplelist.extend(self[seq_idx].samplelist)
+        return TestSeqDataLoader(
+            self.dataset,
+            self.data_root,
+            samplelist,
+            self.seq_len,
+            self.transform,
+        )
 
     def _check_preprocess(self):
         if not os.path.isfile(self.seq_list_file):

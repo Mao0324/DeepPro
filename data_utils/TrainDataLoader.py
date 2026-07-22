@@ -92,26 +92,26 @@ class TrainSeqDataLoader(Dataset):
         return int(len(self.samplelist) * self.sample_rate)
 
     def get_image_label(self, image_path, label_path):
-        image = Image.open(image_path)
-        if 'NUDT-MIRSDT' in self.dataset:
-            image = image.resize([256, 256])
-        elif self.dataset == 'IRSatVideo-LEO':
-            image = image.resize([512, 512])
-        # elif self.dataset == 'RGB-T':
-        #     image = image.resize([480, 480])
-        image = np.array(image, dtype=np.float32)
+        with Image.open(image_path) as image_file:
+            if 'NUDT-MIRSDT' in self.dataset:
+                image_file = image_file.resize([256, 256])
+            elif self.dataset == 'IRSatVideo-LEO':
+                image_file = image_file.resize([512, 512])
+            # elif self.dataset == 'RGB-T':
+            #     image_file = image_file.resize([480, 480])
+            image = np.array(image_file, dtype=np.float32)
         if image.ndim == 3:
             image = image[:, :, 0]
         image = np.expand_dims(np.expand_dims(image, axis=0), axis=0)
 
-        label = Image.open(label_path)
-        if 'NUDT-MIRSDT' in self.dataset:
-            label = label.resize([256, 256])
-        elif self.dataset == 'IRSatVideo-LEO':
-            label = label.resize([512, 512])
-        # elif self.dataset == 'RGB-T':
-        #     label = label.resize([480, 480])
-        label = np.array(label, dtype=np.float32) / 255.
+        with Image.open(label_path) as label_file:
+            if 'NUDT-MIRSDT' in self.dataset:
+                label_file = label_file.resize([256, 256])
+            elif self.dataset == 'IRSatVideo-LEO':
+                label_file = label_file.resize([512, 512])
+            # elif self.dataset == 'RGB-T':
+            #     label_file = label_file.resize([480, 480])
+            label = np.array(label_file, dtype=np.float32) / 255.
         if label.ndim == 3:
             label = label[:, :, 0]
         label[label > 0] = 1.
@@ -127,18 +127,31 @@ class TrainSeqDataLoader(Dataset):
         )
         sample = self.samplelist[sample_idx]
         # sample = random.choice(self.samplelist, weights=self.sample_p)  ## weights不需要合为1
-        for i in range(len(sample)):
+        if len(sample) == 0:
+            raise ValueError('Training sample must contain at least one frame.')
+
+        image_path, label_path = sample[0]
+        image, label = self.get_image_label(image_path, label_path)
+        _, _, h, w = image.shape
+        images = np.empty(
+            [1, len(sample), h, w],
+            dtype=image.dtype,
+        )
+        labels = np.empty(
+            [len(sample), h, w],
+            dtype=label.dtype,
+        )
+        images[:, 0:1, :, :] = image
+        labels[0:1, :, :] = label
+
+        for i in range(1, len(sample)):
             image_path, label_path = sample[i]
             image, label = self.get_image_label(image_path, label_path)
-            if i == 0:
-                images = image
-                labels = label
-            else:
-                images = np.concatenate((images, image), axis=1)   ## [c, t, h, w]
-                labels = np.concatenate((labels, label), axis=0)   ## [t, h, w]
+            images[:, i:i+1, :, :] = image
+            labels[i:i+1, :, :] = label
 
         images = (images - self.train_mean) / self.train_std
-        t, h, w = labels.shape
+        t = labels.shape[0]
         if t < self.seq_len and idx % 2 == 1:
             images = np.concatenate((images, np.zeros(
                 [1, self.seq_len-t, h, w], dtype=images.dtype
