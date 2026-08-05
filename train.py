@@ -218,7 +218,7 @@ def parse_args():
     parser.add_argument('--model', type=str, default='DeepPro-Plus', help='model name [default: pointnet_sem_seg]')
     parser.add_argument('--batch_size', type=int, default=4, help='Batch Size during training [default: 16]')
     parser.add_argument('--epoch', default=32, type=int, help='Epoch to run [default: 32]')
-    parser.add_argument('--learning_rate', default=0.001, type=float, help='Initial learning rate [default: 0.001]')
+    parser.add_argument('--learning_rate', default=0.005, type=float, help='Initial learning rate [default: 0.001]')
     parser.add_argument('--gpu', type=str, default='0', help='GPU to use [default: GPU 0]')
     parser.add_argument('--gpu_num', type=int, default=1, help='GPU to use')
     parser.add_argument('--optimizer', type=str, default='Adam', help='Adam or SGD [default: Adam]')
@@ -287,7 +287,7 @@ def parse_args():
                         help='Persistent DataLoader workers used for validation [default: 4]')
     parser.add_argument('--prefetch_factor', type=int, default=2,
                         help='Batches prefetched by each DataLoader worker [default: 2]')
-    parser.add_argument('--use_swanlab', type=int, default=0, choices=[0, 1], help='Use SwanLab logging [default: 0]')
+    parser.add_argument('--use_swanlab', type=int, default=1, choices=[0, 1], help='Use SwanLab logging [default: 0]')
     parser.add_argument('--swanlab_project', type=str, default='DeepPro', help='SwanLab project name')
     parser.add_argument("--spatial_ckpt", type=str, default="")
     parser.add_argument("--st_ckpt", type=str, default="")

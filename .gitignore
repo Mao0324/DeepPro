@@ -201,4 +201,5 @@ calibration_*.npy
 *.raw
 *.json
 *.pth
+*.zip
 *.txt
