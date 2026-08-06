@@ -88,7 +88,25 @@ def model_configuration(model_module, args):
             'st_ckpt': args.st_ckpt,
             'freeze_pretrained': bool(args.freeze_pretrained),
         })
+    brtd_options = {
+        'use_background': bool(args.brtd_use_background),
+        'adaptive_tdc': bool(args.brtd_adaptive_tdc),
+        'use_gate': bool(args.brtd_use_gate),
+        'zero_init': bool(args.brtd_zero_init),
+    }
+    for name, value in brtd_options.items():
+        if name in parameters:
+            configuration[name] = value
     return configuration
+
+
+def clean_model_state_dict(state_dict):
+    """Remove a DDP prefix without changing ordinary checkpoint keys."""
+    if state_dict and all(key.startswith('module.') for key in state_dict):
+        return {
+            key[len('module.'):]: value for key, value in state_dict.items()
+        }
+    return state_dict
 
 
 def make_checkpoint_state(detector, optimizer, epoch, best_iou, args, config):
@@ -303,6 +321,18 @@ def parse_args():
                         help='Explicit checkpoint to resume')
     parser.add_argument('--run_test_after_train', type=int, default=1,
                         choices=[0, 1], help='Run test.py after successful training')
+    parser.add_argument('--base_ckpt', type=str, default='',
+                        help='Backbone checkpoint used to initialize an adapter model')
+    parser.add_argument('--base_lr_mult', type=float, default=1.0,
+                        help='Learning-rate multiplier for non-BRTD parameters [default: 1.0]')
+    parser.add_argument('--brtd_use_background', type=int, default=1,
+                        choices=[0, 1])
+    parser.add_argument('--brtd_adaptive_tdc', type=int, default=1,
+                        choices=[0, 1])
+    parser.add_argument('--brtd_use_gate', type=int, default=1,
+                        choices=[0, 1])
+    parser.add_argument('--brtd_zero_init', type=int, default=1,
+                        choices=[0, 1])
 
     return parser.parse_args()
 
@@ -316,6 +346,8 @@ def main(args):
         raise ValueError('batch_size and gpu_num must be positive.')
     if args.eval_chunk_rows < 0:
         raise ValueError('eval_chunk_rows must be non-negative.')
+    if args.base_lr_mult <= 0:
+        raise ValueError('base_lr_mult must be positive.')
 
     runtime = initialize_distributed(args.gpu, args.gpu_num)
     if args.batch_size % runtime.world_size:
@@ -552,10 +584,68 @@ def main(args):
             shutil.copy2(model_source, model_snapshot)
         if not loss_snapshot.exists():
             shutil.copy2(loss_source, loss_snapshot)
+        if 'BRTD' in args.model:
+            adapter_source = (
+                Path(ROOT_DIR) / 'networks' / 'layers' / 'brtd_adapter.py'
+            )
+            adapter_snapshot = experiment_dir / adapter_source.name
+            if not adapter_snapshot.exists():
+                shutil.copy2(adapter_source, adapter_snapshot)
     distributed_barrier(runtime)
 
     config = model_configuration(MODEL, args)
     detector = MODEL.detector(NUM_CLASSES, SEQ_LEN, SEQ_LEN, **config)
+
+    if args.base_ckpt and resume_path is None:
+        base_checkpoint_path = Path(args.base_ckpt).expanduser().resolve()
+        if not base_checkpoint_path.is_file():
+            finalize_distributed(runtime)
+            raise FileNotFoundError(
+                'Base checkpoint does not exist: %s' % base_checkpoint_path
+            )
+        base_checkpoint = load_checkpoint(
+            base_checkpoint_path,
+            map_location='cpu',
+        )
+        base_state_dict = base_checkpoint.get(
+            'model_state_dict',
+            base_checkpoint,
+        )
+        incompatible = detector.load_state_dict(
+            clean_model_state_dict(base_state_dict),
+            strict=False,
+        )
+        allowed_missing_prefixes = ('brtd.',)
+        invalid_missing = [
+            key for key in incompatible.missing_keys
+            if not key.startswith(allowed_missing_prefixes)
+        ]
+        if invalid_missing or incompatible.unexpected_keys:
+            finalize_distributed(runtime)
+            raise RuntimeError(
+                'Base checkpoint is incompatible with %s. Missing: %s; '
+                'unexpected: %s'
+                % (
+                    args.model,
+                    invalid_missing,
+                    incompatible.unexpected_keys,
+                )
+            )
+        log_string(
+            'Initialized %s backbone from %s; new adapter keys: %d'
+            % (
+                args.model,
+                base_checkpoint_path,
+                len(incompatible.missing_keys),
+            )
+        )
+        del base_checkpoint, base_state_dict, incompatible
+    elif args.base_ckpt and resume_path is not None:
+        log_string(
+            'Resume checkpoint takes precedence over --base_ckpt; '
+            'backbone initialization was skipped.'
+        )
+
     detector = detector.to(runtime.device)
     if runtime.distributed:
         detector = DistributedDataParallel(
@@ -592,9 +682,51 @@ def main(args):
             'will be slower than GPU-only losses.' % args.loss
         )
 
+    if 'BRTD' in args.model:
+        base_parameters = []
+        adapter_parameters = []
+        for name, parameter in detector.named_parameters():
+            if not parameter.requires_grad:
+                continue
+            if 'brtd.' in name:
+                adapter_parameters.append(parameter)
+            else:
+                base_parameters.append(parameter)
+        if not adapter_parameters:
+            finalize_distributed(runtime)
+            raise RuntimeError(
+                '%s was selected but no BRTD parameters were found.' % args.model
+            )
+        parameter_groups = [
+            {
+                'params': base_parameters,
+                'lr': args.learning_rate * args.base_lr_mult,
+                'lr_scale': args.base_lr_mult,
+            },
+            {
+                'params': adapter_parameters,
+                'lr': args.learning_rate,
+                'lr_scale': 1.0,
+            },
+        ]
+        log_string(
+            'Optimizer groups: %d backbone tensors at %.3fx LR; '
+            '%d BRTD tensors at 1.000x LR.'
+            % (
+                len(base_parameters),
+                args.base_lr_mult,
+                len(adapter_parameters),
+            )
+        )
+    else:
+        parameter_groups = filter(
+            lambda parameter: parameter.requires_grad,
+            detector.parameters(),
+        )
+
     if args.optimizer == 'Adam':
         optimizer = torch.optim.Adam(
-            filter(lambda p: p.requires_grad, detector.parameters()),
+            parameter_groups,
             lr=args.learning_rate,
             betas=(0.9, 0.999),
             eps=1e-08,
@@ -602,7 +734,7 @@ def main(args):
         )
     else:
         optimizer = torch.optim.SGD(
-            filter(lambda p: p.requires_grad, detector.parameters()),
+            parameter_groups,
             lr=args.learning_rate,
             momentum=0.9
         )
@@ -648,7 +780,7 @@ def main(args):
         lr = max(args.learning_rate * (args.lr_decay ** (epoch // args.step_size)), LEARNING_RATE_CLIP)
         log_string('Learning rate:%f' % lr)
         for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
+            param_group['lr'] = lr * param_group.get('lr_scale', 1.0)
         if train_sampler is not None:
             train_sampler.set_epoch(epoch)
         metric_counts = torch.zeros(3, device=runtime.device, dtype=torch.int64)
