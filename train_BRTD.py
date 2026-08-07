@@ -166,7 +166,7 @@ def parse_args():
                                                                      '0.03(IRDST), 0.05(RGB-T), 0.04(SatVideoIRSDT)]')
     parser.add_argument('--lr_decay', type=float, default=0.7, help='Decay rate for lr decay [default: 0.7]')
     parser.add_argument('--threshold_eval', type=float, default=0.5, help='Threshold in evaluation [default: 0.5]')
-    parser.add_argument('--use_swanlab', type=int, default=0, choices=[0, 1], help='Use SwanLab logging [default: 0]')
+    parser.add_argument('--use_swanlab', type=int, default=1, choices=[0, 1], help='Use SwanLab logging [default: 1]')
     parser.add_argument('--swanlab_project', type=str, default='DeepPro', help='SwanLab project name')
     parser.add_argument('--seed', type=int, default=46, help='Random seed')
     parser.add_argument('--base_ckpt', type=str, default='', help='DeepPro-Plus checkpoint used to initialize BRTD')

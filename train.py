@@ -305,8 +305,18 @@ def parse_args():
                         help='Persistent DataLoader workers used for validation [default: 4]')
     parser.add_argument('--prefetch_factor', type=int, default=2,
                         help='Batches prefetched by each DataLoader worker [default: 2]')
-    parser.add_argument('--use_swanlab', type=int, default=1, choices=[0, 1], help='Use SwanLab logging [default: 0]')
+    parser.add_argument('--use_swanlab', type=int, default=1, choices=[0, 1], help='Use SwanLab logging [default: 1]')
     parser.add_argument('--swanlab_project', type=str, default='DeepPro', help='SwanLab project name')
+    parser.add_argument('--swanlab_workspace', type=str, default=None,
+                        help='Optional SwanLab workspace/organization')
+    parser.add_argument('--swanlab_group', type=str, default=None,
+                        help='Optional SwanLab comparison group')
+    parser.add_argument('--swanlab_mode', choices=['cloud', 'local', 'offline'],
+                        default='cloud', help='SwanLab logging mode [default: cloud]')
+    parser.add_argument('--swanlab_id', type=str, default=None,
+                        help='Existing SwanLab run ID used for continuation')
+    parser.add_argument('--swanlab_resume', choices=['allow', 'must', 'never'],
+                        default='never', help='SwanLab run resume policy')
     parser.add_argument("--spatial_ckpt", type=str, default="")
     parser.add_argument("--st_ckpt", type=str, default="")
     parser.add_argument("--freeze_pretrained", type=int, default=1)
@@ -466,18 +476,28 @@ def main(args):
     if args.use_swanlab and runtime.is_main:
         try:
             import swanlab as swanlab_module
-        except ImportError:
-            log_string('SwanLab is not installed. Skip SwanLab logging.')
-        if swanlab_module is not None:
-            try:
-                swanlab_run = swanlab_module.init(
-                    project=args.swanlab_project,
-                    experiment_name=args.log_dir,
-                    config=vars(args),
-                )
-            except Exception as e:
-                log_string('SwanLab init failed: %s. Skip SwanLab logging.' % e)
-                swanlab_run = None
+        except ImportError as error:
+            finalize_distributed(runtime)
+            raise RuntimeError(
+                'SwanLab is required when --use_swanlab=1.'
+            ) from error
+        try:
+            swanlab_run = swanlab_module.init(
+                project=args.swanlab_project,
+                workspace=args.swanlab_workspace,
+                experiment_name=args.log_dir,
+                group=args.swanlab_group,
+                mode=args.swanlab_mode,
+                id=args.swanlab_id,
+                resume=args.swanlab_resume,
+                config=vars(args),
+            )
+        except Exception as error:
+            finalize_distributed(runtime)
+            raise RuntimeError(
+                'SwanLab initialization failed; refusing to train without logging: %s'
+                % error
+            ) from error
 
     args.datapath = str(Path(args.datapath).expanduser().resolve())
     root = args.datapath
@@ -785,6 +805,12 @@ def main(args):
             train_sampler.set_epoch(epoch)
         metric_counts = torch.zeros(3, device=runtime.device, dtype=torch.int64)
         loss_stats = torch.zeros(2, device=runtime.device, dtype=torch.float64)
+        component_names = tuple(getattr(criterion, 'component_names', ()))
+        component_stats = torch.zeros(
+            len(component_names) + 1,
+            device=runtime.device,
+            dtype=torch.float64,
+        )
         detector.train()
 
         for images, targets in tqdm(
@@ -826,17 +852,29 @@ def main(args):
                 )
                 loss_stats[0] += loss.detach().to(torch.float64)
                 loss_stats[1] += 1
+                for component_index, component_name in enumerate(component_names):
+                    component_value = criterion.last_components[component_name]
+                    component_stats[component_index] += component_value.to(
+                        device=runtime.device, dtype=torch.float64
+                    )
+                component_stats[-1] += 1
             del images, targets, seq_midpred, loss, midpred_choice, batch_label
 
         optimizer.zero_grad(set_to_none=True)
         all_reduce_sum(metric_counts, runtime)
         all_reduce_sum(loss_stats, runtime)
+        all_reduce_sum(component_stats, runtime)
         train_loss = (loss_stats[0] / loss_stats[1].clamp_min(1)).item()
         train_iou, train_precision, train_recall, train_f1 = (
             binary_segmentation_metrics(*metric_counts)
         )
+        component_count = component_stats[-1].clamp_min(1.0)
+        component_means = {
+            name: (component_stats[index] / component_count).item()
+            for index, name in enumerate(component_names)
+        }
 
-        del metric_counts, loss_stats
+        del metric_counts, loss_stats, component_stats
         release_cuda_memory('training cleanup')
 
         log_string('Training mean loss: %f' % train_loss)
@@ -844,15 +882,25 @@ def main(args):
         log_string('Training pixel precision: %f' % train_precision)
         log_string('Training pixel recall: %f' % train_recall)
         log_string('Training pixel F1: %f' % train_f1)
+        for component_name, component_value in component_means.items():
+            log_string(
+                'Training loss component %s: %f'
+                % (component_name, component_value)
+            )
         if swanlab_run is not None:
-            swanlab_module.log({
+            swanlab_metrics = {
                 'train/loss': train_loss,
                 'train/iou': train_iou,
                 'train/precision': train_precision,
                 'train/recall': train_recall,
                 'train/f1': train_f1,
                 'train/lr': lr,
-            }, step=epoch + 1)
+            }
+            swanlab_metrics.update({
+                'train/loss_component/' + name: value
+                for name, value in component_means.items()
+            })
+            swanlab_module.log(swanlab_metrics, step=epoch + 1)
 
         distributed_barrier(runtime)
         if runtime.is_main:
