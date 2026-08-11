@@ -203,3 +203,12 @@ calibration_*.npy
 *.pth
 *.zip
 *.txt
+
+# DeepPro runtime and experiment artifacts
+/log/
+/analysis/
+/screen_logs/
+/swanlog/
+/results/
+*.screen.log
+*.orig

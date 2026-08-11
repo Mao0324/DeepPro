@@ -48,6 +48,8 @@ def parse_args():
                         help='Randomly save this many prediction masks; 0 saves all when --visual is set')
     parser.add_argument('--visual_seed', type=int, default=46,
                         help='Random seed used by --visual_count')
+    parser.add_argument('--visual_dir', type=str, default=None,
+                        help='Prediction PNG output directory; defaults to an experiment subdirectory')
     parser.add_argument('--centroid_txt', action='store_true', default=False,
                         help='Write one centroid TXT file for every validation sequence')
     parser.add_argument('--centroid_threshold', type=float, default=0.5,
@@ -199,14 +201,17 @@ def main(args):
     if not experiment_dir.is_dir():
         raise FileNotFoundError('Experiment directory does not exist: %s' % experiment_dir)
     if args.visual:
-        if args.visual_count > 0:
-            visual_name = 'visual_random_%d_seed%d' % (
-                args.visual_count,
-                args.visual_seed,
-            )
+        if args.visual_dir:
+            visual_dir = Path(args.visual_dir).expanduser().resolve()
         else:
-            visual_name = 'visual'
-        visual_dir = Path(experiment_dir) / visual_name
+            if args.visual_count > 0:
+                visual_name = 'visual_random_%d_seed%d' % (
+                    args.visual_count,
+                    args.visual_seed,
+                )
+            else:
+                visual_name = 'visual'
+            visual_dir = Path(experiment_dir) / visual_name
         require_empty_output_directory(visual_dir, args.overwrite_outputs)
         visual_dir.mkdir(parents=True, exist_ok=True)
         visual_rng = np.random.default_rng(args.visual_seed)
