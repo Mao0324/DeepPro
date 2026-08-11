@@ -550,12 +550,18 @@ class F1CalibratedOHEMLoss(BinarySegmentationLoss):
         self.ramp_epochs = ramp_epochs
         self.last_components = {}
 
-    def _hard_margin_loss(self, logits, target):
+    def _hard_margin_loss(self, logits, target, valid_frames=None):
         losses = []
         class_weight_sum = self.fp_weight + self.fn_weight
         positive_weight = self.fn_weight / class_weight_sum
         negative_weight = self.fp_weight / class_weight_sum
-        for clip_logits, clip_target in zip(logits, target):
+        for clip_index, (clip_logits, clip_target) in enumerate(
+            zip(logits, target)
+        ):
+            if valid_frames is not None:
+                clip_mask = valid_frames[clip_index]
+                clip_logits = clip_logits[clip_mask]
+                clip_target = clip_target[clip_mask]
             flat_logits = clip_logits.reshape(-1)
             positive_mask = clip_target.reshape(-1) > 0.5
             positive_logits = flat_logits[positive_mask]
@@ -599,13 +605,38 @@ class F1CalibratedOHEMLoss(BinarySegmentationLoss):
         )
         return self.hard_weight * progress
 
-    def forward(self, logits, target, images=None, epoch=None):
+    def forward(
+        self, logits, target, images=None, epoch=None, valid_frames=None
+    ):
         logits, target = _prepare_binary_tensors(logits, target)
-        tversky = _tversky_loss_per_frame(
+        if valid_frames is not None:
+            valid_frames = valid_frames.to(
+                device=logits.device, dtype=torch.bool
+            )
+            if valid_frames.shape != logits.shape[:2]:
+                raise ValueError(
+                    'valid_frames must have shape [B,T], got %s for logits %s'
+                    % (tuple(valid_frames.shape), tuple(logits.shape))
+                )
+            if not torch.all(valid_frames.any(dim=1)):
+                raise ValueError(
+                    'Every training clip must contain a valid frame.'
+                )
+        tversky_per_frame = _tversky_loss_per_frame(
             logits, target, self.fp_weight, self.fn_weight, self.eps
-        ).mean()
-        dice = _dice_loss_per_frame(logits, target, self.eps).mean()
-        hard_margin = self._hard_margin_loss(logits, target)
+        )
+        dice_per_frame = _dice_loss_per_frame(
+            logits, target, self.eps
+        )
+        if valid_frames is None:
+            tversky = tversky_per_frame.mean()
+            dice = dice_per_frame.mean()
+        else:
+            tversky = tversky_per_frame[valid_frames].mean()
+            dice = dice_per_frame[valid_frames].mean()
+        hard_margin = self._hard_margin_loss(
+            logits, target, valid_frames=valid_frames
+        )
         current_hard_weight = self._current_hard_weight(epoch)
         total = (
             tversky

@@ -97,6 +97,16 @@ def model_configuration(model_module, args):
     for name, value in brtd_options.items():
         if name in parameters:
             configuration[name] = value
+    structure_options = {
+        'structure_variant': args.structure_variant,
+        'structure_bottleneck_channels': (
+            args.structure_bottleneck_channels
+        ),
+        'structure_max_shift': args.structure_max_shift,
+    }
+    for name, value in structure_options.items():
+        if name in parameters:
+            configuration[name] = value
     return configuration
 
 
@@ -109,7 +119,15 @@ def clean_model_state_dict(state_dict):
     return state_dict
 
 
-def make_checkpoint_state(detector, optimizer, epoch, best_iou, args, config):
+def make_checkpoint_state(
+    detector,
+    optimizer,
+    epoch,
+    best_iou,
+    args,
+    config,
+    early_stopping_state=None,
+):
     stored_config = dict(config)
     if 'spatial_ckpt' in stored_config:
         # Branch weights are already part of model_state_dict. Test/resume must
@@ -117,7 +135,7 @@ def make_checkpoint_state(detector, optimizer, epoch, best_iou, args, config):
         stored_config['spatial_ckpt'] = None
         stored_config['st_ckpt'] = None
         stored_config['freeze_pretrained'] = False
-    return {
+    state = {
         'epoch': epoch,
         'class_avg_iou': best_iou,
         'model_name': args.model,
@@ -125,6 +143,64 @@ def make_checkpoint_state(detector, optimizer, epoch, best_iou, args, config):
         'model_state_dict': unwrap_model(detector).state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
     }
+    if early_stopping_state is not None:
+        state['early_stopping_state'] = dict(early_stopping_state)
+    return state
+
+
+def new_early_stopping_state(metric):
+    """Return serializable state for validation-based early stopping."""
+    mode = 'min' if metric == 'eval_loss' else 'max'
+    return {
+        'metric': metric,
+        'mode': mode,
+        'best_value': None,
+        'best_epoch': 0,
+        'bad_epochs': 0,
+        'stopped': False,
+    }
+
+
+def early_stopping_metric_value(metric, eval_loss, eval_iou, eval_f1):
+    values = {
+        'eval_loss': eval_loss,
+        'eval_iou': eval_iou,
+        'eval_f1': eval_f1,
+    }
+    return float(values[metric])
+
+
+def update_early_stopping_state(
+    state,
+    value,
+    epoch,
+    patience,
+    min_delta,
+    start_epoch,
+):
+    """Update early-stopping state and return (improved, should_stop)."""
+    best_value = state['best_value']
+    if best_value is None:
+        improved = True
+    elif state['mode'] == 'min':
+        improved = value < best_value - min_delta
+    else:
+        improved = value > best_value + min_delta
+
+    if improved:
+        state['best_value'] = float(value)
+        state['best_epoch'] = int(epoch)
+        state['bad_epochs'] = 0
+    elif epoch >= start_epoch:
+        state['bad_epochs'] = int(state['bad_epochs']) + 1
+    else:
+        state['bad_epochs'] = 0
+
+    should_stop = (
+        epoch >= start_epoch and state['bad_epochs'] >= patience
+    )
+    state['stopped'] = bool(should_stop)
+    return improved, should_stop
 
 
 def evaluate_sequences(
@@ -251,8 +327,34 @@ def parse_args():
     parser.add_argument('--step_size', type=int, default=10, help='Decay step for lr decay [default: every 10 epochs]')
     parser.add_argument('--sample_rate', type=float, default=0.1, help='Sampling rate for training [default: 0.1(NUDT-MIRSDT), '
                                                                      '0.03(IRDST), 0.05(RGB-T), 0.04(SatVideoIRSDT)]')
+    parser.add_argument(
+        '--mask_padded_frames', type=int, default=0, choices=[0, 1],
+        help='Exclude synthetic all-zero sequence-padding frames '
+             'from training loss and metrics (F1-OHEM only).',
+    )
     parser.add_argument('--lr_decay', type=float, default=0.7, help='Decay rate for lr decay [default: 0.7]')
     parser.add_argument('--threshold_eval', type=float, default=0.5, help='Threshold in evaluation [default: 0.5]')
+    parser.add_argument(
+        '--early_stopping_patience', type=int, default=0,
+        help='Validation epochs without improvement before stopping; '
+             '0 disables early stopping [default: 0].',
+    )
+    parser.add_argument(
+        '--early_stopping_min_delta', type=float, default=1.0e-4,
+        help='Minimum monitored-metric improvement [default: 1e-4].',
+    )
+    parser.add_argument(
+        '--early_stopping_start_epoch', type=int, default=15,
+        help='First epoch at which non-improving evaluations count toward '
+             'patience [default: 15].',
+    )
+    parser.add_argument(
+        '--early_stopping_metric',
+        choices=['eval_f1', 'eval_iou', 'eval_loss'],
+        default='eval_f1',
+        help='Validation metric monitored by early stopping '
+             '[default: eval_f1].',
+    )
     parser.add_argument(
         '--loss',
         type=str,
@@ -343,6 +445,23 @@ def parse_args():
                         choices=[0, 1])
     parser.add_argument('--brtd_zero_init', type=int, default=1,
                         choices=[0, 1])
+    parser.add_argument(
+        '--structure_variant', type=str, default='second_order',
+        choices=[
+            'second_order', 'lfp_shallow', 'lfp_deep',
+            'global_align', 'local_align', 'multiscale_head',
+            'bidirectional', 'tdc_dual_stream',
+        ],
+        help='Structural adapter used by DeepPro-Plus_BRTD3.',
+    )
+    parser.add_argument(
+        '--structure_bottleneck_channels', type=int, default=8,
+        help='Bottleneck width for BRTD3 structural adapters.',
+    )
+    parser.add_argument(
+        '--structure_max_shift', type=float, default=4.0,
+        help='Maximum alignment displacement in feature pixels.',
+    )
 
     return parser.parse_args()
 
@@ -356,8 +475,33 @@ def main(args):
         raise ValueError('batch_size and gpu_num must be positive.')
     if args.eval_chunk_rows < 0:
         raise ValueError('eval_chunk_rows must be non-negative.')
+    if args.early_stopping_patience < 0:
+        raise ValueError('early_stopping_patience must be non-negative.')
+    if args.early_stopping_min_delta < 0:
+        raise ValueError('early_stopping_min_delta must be non-negative.')
+    if args.early_stopping_start_epoch < 1:
+        raise ValueError('early_stopping_start_epoch must be positive.')
+    if (
+        args.early_stopping_patience > 0
+        and args.early_stopping_start_epoch > args.epoch
+    ):
+        raise ValueError(
+            'early_stopping_start_epoch cannot exceed --epoch when early '
+            'stopping is enabled.'
+        )
     if args.base_lr_mult <= 0:
         raise ValueError('base_lr_mult must be positive.')
+    if args.mask_padded_frames and args.loss != 'f1_calibrated_ohem':
+        raise ValueError(
+            '--mask_padded_frames currently requires '
+            '--loss f1_calibrated_ohem.'
+        )
+    if args.structure_bottleneck_channels <= 0:
+        raise ValueError(
+            'structure_bottleneck_channels must be positive.'
+        )
+    if args.structure_max_shift <= 0:
+        raise ValueError('structure_max_shift must be positive.')
 
     runtime = initialize_distributed(args.gpu, args.gpu_num)
     if args.batch_size % runtime.world_size:
@@ -487,6 +631,7 @@ def main(args):
                 workspace=args.swanlab_workspace,
                 experiment_name=args.log_dir,
                 group=args.swanlab_group,
+                logdir=str(experiment_dir / 'swanlog'),
                 mode=args.swanlab_mode,
                 id=args.swanlab_id,
                 resume=args.swanlab_resume,
@@ -604,9 +749,15 @@ def main(args):
             shutil.copy2(model_source, model_snapshot)
         if not loss_snapshot.exists():
             shutil.copy2(loss_source, loss_snapshot)
-        if 'BRTD' in args.model:
+        adapter_filenames = {
+            'DeepPro-Plus_BRTD': ('brtd_adapter.py',),
+            'DeepPro-Plus_BRTD2': ('brtd_v2_adapter.py',),
+            'DeepPro-Plus_BRTD3': ('structure_adapters.py',),
+        }.get(args.model, ())
+        for adapter_filename in adapter_filenames:
             adapter_source = (
-                Path(ROOT_DIR) / 'networks' / 'layers' / 'brtd_adapter.py'
+                Path(ROOT_DIR) / 'networks' / 'layers'
+                / adapter_filename
             )
             adapter_snapshot = experiment_dir / adapter_source.name
             if not adapter_snapshot.exists():
@@ -761,6 +912,11 @@ def main(args):
 
     best_iou = 0
     start_epoch = 0
+    early_stopping_state = None
+    if args.early_stopping_patience > 0:
+        early_stopping_state = new_early_stopping_state(
+            args.early_stopping_metric
+        )
     if resume_path is not None:
         try:
             checkpoint = load_checkpoint(resume_path, map_location='cpu')
@@ -777,10 +933,37 @@ def main(args):
             move_optimizer_state(optimizer, runtime.device)
             start_epoch = int(checkpoint['epoch']) + 1
             best_iou = float(checkpoint.get('class_avg_iou', 0.0))
+            saved_early_stopping_state = checkpoint.get(
+                'early_stopping_state'
+            )
+            if (
+                early_stopping_state is not None
+                and saved_early_stopping_state is not None
+            ):
+                saved_metric = saved_early_stopping_state.get('metric')
+                if saved_metric != args.early_stopping_metric:
+                    raise ValueError(
+                        'Checkpoint early-stopping metric %s does not match '
+                        '--early_stopping_metric %s.'
+                        % (saved_metric, args.early_stopping_metric)
+                    )
+                early_stopping_state.update(saved_early_stopping_state)
+                early_stopping_state['stopped'] = False
             log_string(
                 'Resumed checkpoint %s at epoch %d.'
                 % (resume_path, start_epoch)
             )
+            if early_stopping_state is not None:
+                log_string(
+                    'Restored early stopping: metric=%s best=%s at epoch %d; '
+                    'bad_epochs=%d.'
+                    % (
+                        early_stopping_state['metric'],
+                        early_stopping_state['best_value'],
+                        early_stopping_state['best_epoch'],
+                        early_stopping_state['bad_epochs'],
+                    )
+                )
             del checkpoint
         except Exception as error:
             finalize_distributed(runtime)
@@ -790,6 +973,21 @@ def main(args):
             ) from error
     else:
         log_string('Starting a new experiment from scratch.')
+
+    if early_stopping_state is None:
+        log_string('Early stopping disabled.')
+    else:
+        log_string(
+            'Early stopping enabled: metric=%s mode=%s patience=%d '
+            'min_delta=%.8f start_epoch=%d.'
+            % (
+                early_stopping_state['metric'],
+                early_stopping_state['mode'],
+                args.early_stopping_patience,
+                args.early_stopping_min_delta,
+                args.early_stopping_start_epoch,
+            )
+        )
 
     release_cuda_memory('checkpoint loading')
 
@@ -819,6 +1017,16 @@ def main(args):
             smoothing=0.9,
             disable=not runtime.is_main,
         ):
+            valid_frames = None
+            if args.mask_padded_frames:
+                valid_frames = images.abs().sum(dim=(1, 3, 4)).ne(0)
+                if not torch.all(valid_frames.any(dim=1)):
+                    raise RuntimeError(
+                        'A training clip contains no valid frames.'
+                    )
+                valid_frames = valid_frames.to(
+                    runtime.device, non_blocking=True
+                )
             optimizer.zero_grad(set_to_none=True)
             images = images.float().to(runtime.device, non_blocking=True)
             targets = targets.float().to(runtime.device, non_blocking=True)
@@ -826,11 +1034,14 @@ def main(args):
             sequence_features, seq_midpred = detector(images)
             del sequence_features
 
+            criterion_arguments = {
+                'images': images,
+                'epoch': epoch,
+            }
+            if valid_frames is not None:
+                criterion_arguments['valid_frames'] = valid_frames
             loss = criterion(
-                seq_midpred,
-                targets,
-                images=images,
-                epoch=epoch,
+                seq_midpred, targets, **criterion_arguments
             )
             loss.backward()
             optimizer.step()
@@ -840,6 +1051,14 @@ def main(args):
                     args.threshold_eval
                 )
                 batch_label = targets.gt(0)
+                if valid_frames is not None:
+                    metric_mask = valid_frames[:, :, None, None]
+                    midpred_choice = torch.logical_and(
+                        midpred_choice, metric_mask
+                    )
+                    batch_label = torch.logical_and(
+                        batch_label, metric_mask
+                    )
                 metric_counts[0] += torch.logical_and(
                     midpred_choice,
                     batch_label,
@@ -859,6 +1078,7 @@ def main(args):
                     )
                 component_stats[-1] += 1
             del images, targets, seq_midpred, loss, midpred_choice, batch_label
+            del criterion_arguments, valid_frames
 
         optimizer.zero_grad(set_to_none=True)
         all_reduce_sum(metric_counts, runtime)
@@ -903,6 +1123,7 @@ def main(args):
             swanlab_module.log(swanlab_metrics, step=epoch + 1)
 
         distributed_barrier(runtime)
+        stop_training = False
         if runtime.is_main:
             log_string('---- EPOCH %03d EVALUATION ----' % (epoch + 1))
             eval_loss, eval_metrics = evaluate_sequences(
@@ -922,6 +1143,37 @@ def main(args):
             log_string('Eval pixel recall: %f' % eval_recall)
             log_string('Eval pixel F1: %f' % eval_f1)
 
+            early_stopping_improved = False
+            if early_stopping_state is not None:
+                monitored_value = early_stopping_metric_value(
+                    args.early_stopping_metric,
+                    eval_loss,
+                    mIoU_mid,
+                    eval_f1,
+                )
+                early_stopping_improved, stop_training = (
+                    update_early_stopping_state(
+                        early_stopping_state,
+                        monitored_value,
+                        epoch + 1,
+                        args.early_stopping_patience,
+                        args.early_stopping_min_delta,
+                        args.early_stopping_start_epoch,
+                    )
+                )
+                log_string(
+                    'Early stopping %s=%.6f; best=%.6f at epoch %d; '
+                    'bad_epochs=%d/%d.'
+                    % (
+                        args.early_stopping_metric,
+                        monitored_value,
+                        early_stopping_state['best_value'],
+                        early_stopping_state['best_epoch'],
+                        early_stopping_state['bad_epochs'],
+                        args.early_stopping_patience,
+                    )
+                )
+
             improved = mIoU_mid >= best_iou
             if mIoU_mid >= best_iou:
                 best_iou = mIoU_mid
@@ -932,11 +1184,16 @@ def main(args):
                 best_iou,
                 args,
                 config,
+                early_stopping_state=early_stopping_state,
             )
             latest_path = checkpoints_dir / 'latest_model.pth'
             atomic_torch_save(state, latest_path)
             log_string('Saved recoverable checkpoint at %s' % latest_path)
-            if (epoch + 1) % 5 == 0 or epoch + 1 == args.epoch:
+            if (
+                (epoch + 1) % 5 == 0
+                or epoch + 1 == args.epoch
+                or stop_training
+            ):
                 epoch_path = checkpoints_dir / (
                     'epoch_%d_model.pth' % (epoch + 1)
                 )
@@ -946,24 +1203,65 @@ def main(args):
                 best_path = checkpoints_dir / 'best_model.pth'
                 atomic_torch_save(state, best_path)
                 log_string('Saved best checkpoint at %s' % best_path)
+            if early_stopping_improved:
+                early_best_path = (
+                    checkpoints_dir / 'early_stopping_best_model.pth'
+                )
+                atomic_torch_save(state, early_best_path)
+                log_string(
+                    'Saved early-stopping best checkpoint at %s'
+                    % early_best_path
+                )
             del state
             log_string('Best mIoU_mid: %f' % best_iou)
             if swanlab_run is not None:
-                swanlab_module.log({
+                eval_swanlab_metrics = {
                     'eval/loss': eval_loss,
                     'eval/iou': mIoU_mid,
                     'eval/precision': eval_precision,
                     'eval/recall': eval_recall,
                     'eval/f1': eval_f1,
                     'eval/best_iou': best_iou,
-                }, step=epoch + 1)
+                }
+                if early_stopping_state is not None:
+                    eval_swanlab_metrics.update({
+                        'eval/early_stopping_best': (
+                            early_stopping_state['best_value']
+                        ),
+                        'eval/early_stopping_bad_epochs': (
+                            early_stopping_state['bad_epochs']
+                        ),
+                    })
+                swanlab_module.log(
+                    eval_swanlab_metrics, step=epoch + 1
+                )
+            if stop_training:
+                log_string(
+                    'EARLY STOP triggered at epoch %d: %s did not improve '
+                    'by at least %.8f for %d counted evaluations. Best '
+                    'value %.6f was observed at epoch %d.'
+                    % (
+                        epoch + 1,
+                        args.early_stopping_metric,
+                        args.early_stopping_min_delta,
+                        args.early_stopping_patience,
+                        early_stopping_state['best_value'],
+                        early_stopping_state['best_epoch'],
+                    )
+                )
 
         best_iou = broadcast_object(
             best_iou if runtime.is_main else None,
             runtime,
         )
+        stop_training = broadcast_object(
+            stop_training if runtime.is_main else None,
+            runtime,
+        )
         distributed_barrier(runtime)
         release_cuda_memory('evaluation cleanup')
+        if stop_training:
+            break
 
     if swanlab_run is not None and hasattr(swanlab_module, 'finish'):
         swanlab_module.finish()
