@@ -448,7 +448,7 @@ def parse_args():
     parser.add_argument(
         '--structure_variant', type=str, default='second_order',
         choices=[
-            'second_order', 'lfp_shallow', 'lfp_deep',
+            'raw_apmd', 'second_order', 'lfp_shallow', 'lfp_deep',
             'global_align', 'local_align', 'multiscale_head',
             'bidirectional', 'tdc_dual_stream',
         ],
@@ -1193,6 +1193,7 @@ def main(args):
                 (epoch + 1) % 5 == 0
                 or epoch + 1 == args.epoch
                 or stop_training
+                or early_stopping_improved
             ):
                 epoch_path = checkpoints_dir / (
                     'epoch_%d_model.pth' % (epoch + 1)

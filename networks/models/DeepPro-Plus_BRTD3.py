@@ -50,6 +50,9 @@ class detector(nn.Module):
         if structure_variant == 'lfp_shallow':
             adapter_channels = 8
             self.adapter_position = 'shallow'
+        elif structure_variant == 'raw_apmd':
+            adapter_channels = 32
+            self.adapter_position = 'raw_fusion'
         elif structure_variant == 'multiscale_head':
             adapter_channels = 32
             self.adapter_position = 'post_tpro'
@@ -76,7 +79,17 @@ class detector(nn.Module):
         )
         self.conv_out2 = nn.Conv3d(8, num_classes, kernel_size=1)
 
-    def _apply_adapter(self, features, return_aux):
+    def _apply_adapter(
+        self, features, return_aux, raw_frames=None
+    ):
+        if self.adapter_position == 'raw_fusion':
+            if raw_frames is None:
+                raise ValueError('raw_fusion adapter requires raw_frames')
+            if return_aux:
+                return self.brtd(
+                    features, raw_frames, return_aux=True
+                )
+            return self.brtd(features, raw_frames), None
         if return_aux:
             return self.brtd(features, return_aux=True)
         return self.brtd(features), None
@@ -89,9 +102,9 @@ class detector(nn.Module):
                 seq_feats, return_aux
             )
         seq_feats = self.layer1(seq_feats)
-        if self.adapter_position == 'deep':
+        if self.adapter_position in {'deep', 'raw_fusion'}:
             seq_feats, auxiliary = self._apply_adapter(
-                seq_feats, return_aux
+                seq_feats, return_aux, raw_frames=seq_imgs
             )
 
         seq_feats = seq_feats.permute(0, 3, 4, 1, 2)

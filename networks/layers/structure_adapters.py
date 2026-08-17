@@ -11,6 +11,7 @@ import torch.nn.functional as F
 
 
 STRUCTURE_VARIANTS = (
+    'raw_apmd',
     'second_order',
     'lfp_shallow',
     'lfp_deep',
@@ -20,6 +21,56 @@ STRUCTURE_VARIANTS = (
     'bidirectional',
     'tdc_dual_stream',
 )
+
+
+def _valid_frame_mask(raw_frames):
+    """Identify exact zero-padding inserted by the sequence loaders."""
+    if raw_frames.ndim != 5:
+        raise ValueError(
+            'raw_frames must have shape [B,C,T,H,W], got %s'
+            % (tuple(raw_frames.shape),)
+        )
+    return raw_frames.detach().abs().amax(
+        dim=(1, 3, 4), keepdim=True
+    ).ne(0)
+
+
+def _valid_temporal_neighbours(features, valid_mask, step):
+    """Build temporal neighbours without treating zero-padding as motion."""
+    if step <= 0:
+        raise ValueError('temporal step must be positive')
+    batch, _, time, _, _ = features.shape
+    if valid_mask.shape != (batch, 1, time, 1, 1):
+        raise ValueError(
+            'valid_mask has shape %s, expected %s'
+            % (
+                tuple(valid_mask.shape),
+                (batch, 1, time, 1, 1),
+            )
+        )
+    if step >= time:
+        return features, features
+
+    previous = torch.cat([
+        features[:, :, :1].expand(-1, -1, step, -1, -1),
+        features[:, :, :-step],
+    ], dim=2)
+    following = torch.cat([
+        features[:, :, step:],
+        features[:, :, -1:].expand(-1, -1, step, -1, -1),
+    ], dim=2)
+    false_padding = torch.zeros_like(valid_mask[:, :, :step])
+    previous_valid = torch.cat([
+        false_padding, valid_mask[:, :, :-step]
+    ], dim=2)
+    following_valid = torch.cat([
+        valid_mask[:, :, step:], false_padding
+    ], dim=2)
+    # For a valid query near a padded boundary, using the query itself is a
+    # neutral temporal neighbour and therefore cannot create a padding edge.
+    previous = torch.where(previous_valid, previous, features)
+    following = torch.where(following_valid, following, features)
+    return previous, following
 
 
 def _group_count(channels, maximum=4):
@@ -100,6 +151,181 @@ def _reliability_gate(bottleneck_channels, input_multiplier=2):
     nn.init.zeros_(gate[-2].weight)
     nn.init.constant_(gate[-2].bias, -2.0)
     return gate
+
+
+class _FramewiseGroupNorm(nn.GroupNorm):
+    """Apply GroupNorm independently to each frame of a 5D sequence."""
+
+    def forward(self, features):
+        if features.ndim != 5:
+            return super().forward(features)
+        batch, channels, time, height, width = features.shape
+        frames = features.permute(0, 2, 1, 3, 4).reshape(
+            batch * time, channels, height, width
+        )
+        frames = super().forward(frames)
+        return frames.view(
+            batch, time, channels, height, width
+        ).permute(0, 2, 1, 3, 4).contiguous()
+
+
+class RawAppearanceMotionAdapter(nn.Module):
+    """Preserve raw appearance and add multi-scale first/second dynamics.
+
+    DeepPro's pretrained difference stream remains the identity path.  This
+    adapter separately encodes each raw frame, estimates motion at temporal
+    offsets 1/2/4, and injects only a zero-initialized additive residual.  The
+    adapter therefore starts with exactly the pretrained logits and can learn
+    signed corrections without a gate suppressing weak-target evidence.
+    """
+
+    def __init__(
+        self,
+        channels=32,
+        bottleneck_channels=8,
+        temporal_steps=(1, 2, 4),
+    ):
+        super().__init__()
+        if not temporal_steps or any(step <= 0 for step in temporal_steps):
+            raise ValueError('temporal_steps must contain positive integers')
+        self.channels = int(channels)
+        self.bottleneck_channels = int(bottleneck_channels)
+        self.temporal_steps = tuple(int(step) for step in temporal_steps)
+
+        groups = _group_count(self.bottleneck_channels)
+        self.appearance_encoder = nn.Sequential(
+            nn.Conv3d(
+                1,
+                self.bottleneck_channels,
+                kernel_size=(1, 5, 5),
+                padding=(0, 2, 2),
+                bias=False,
+            ),
+            _FramewiseGroupNorm(
+                groups, self.bottleneck_channels
+            ),
+            nn.SiLU(inplace=True),
+            nn.Conv3d(
+                self.bottleneck_channels,
+                self.bottleneck_channels,
+                kernel_size=(1, 3, 3),
+                padding=(0, 1, 1),
+                groups=self.bottleneck_channels,
+                bias=False,
+            ),
+            _FramewiseGroupNorm(
+                groups, self.bottleneck_channels
+            ),
+            nn.SiLU(inplace=True),
+        )
+        scale_count = len(self.temporal_steps)
+        self.first_order_scale_logits = nn.Parameter(torch.zeros(
+            scale_count, self.bottleneck_channels
+        ))
+        self.second_order_scale_logits = nn.Parameter(torch.zeros(
+            scale_count, self.bottleneck_channels
+        ))
+        self.motion_fusion = nn.Sequential(
+            nn.Conv3d(
+                self.bottleneck_channels * 2,
+                self.bottleneck_channels,
+                kernel_size=1,
+                bias=False,
+            ),
+            _FramewiseGroupNorm(
+                groups, self.bottleneck_channels
+            ),
+            nn.SiLU(inplace=True),
+        )
+        self.domain_fusion = nn.Sequential(
+            nn.Conv3d(
+                self.bottleneck_channels * 3,
+                self.bottleneck_channels,
+                kernel_size=(1, 3, 3),
+                padding=(0, 1, 1),
+                bias=False,
+            ),
+            _FramewiseGroupNorm(
+                groups, self.bottleneck_channels
+            ),
+            nn.SiLU(inplace=True),
+        )
+        self.projection = _zero_projection(
+            self.bottleneck_channels, self.channels
+        )
+
+    @staticmethod
+    def _channel_scale_weights(logits):
+        return torch.softmax(logits, dim=0).view(
+            logits.shape[0], 1, logits.shape[1], 1, 1, 1
+        )
+
+    def forward(self, backbone_features, raw_frames, return_aux=False):
+        if backbone_features.ndim != 5 or raw_frames.ndim != 5:
+            raise ValueError(
+                'backbone_features and raw_frames must both be 5D tensors'
+            )
+        if backbone_features.shape[0] != raw_frames.shape[0]:
+            raise ValueError('backbone_features/raw_frames batch mismatch')
+        if backbone_features.shape[2:] != raw_frames.shape[2:]:
+            raise ValueError('backbone_features/raw_frames T/H/W mismatch')
+        if backbone_features.shape[1] != self.channels:
+            raise ValueError(
+                'expected %d backbone channels, got %d'
+                % (self.channels, backbone_features.shape[1])
+            )
+        if raw_frames.shape[1] != 1:
+            raise ValueError(
+                'raw appearance branch expects one input channel, got %d'
+                % raw_frames.shape[1]
+            )
+
+        valid_mask = _valid_frame_mask(raw_frames)
+        valid = valid_mask.to(dtype=raw_frames.dtype)
+        appearance = self.appearance_encoder(raw_frames) * valid
+        first_weights = self._channel_scale_weights(
+            self.first_order_scale_logits
+        )
+        second_weights = self._channel_scale_weights(
+            self.second_order_scale_logits
+        )
+        first_context = torch.zeros_like(appearance)
+        second_context = torch.zeros_like(appearance)
+        for index, step in enumerate(self.temporal_steps):
+            previous, following = _valid_temporal_neighbours(
+                appearance, valid_mask, step
+            )
+            first_order = 0.5 * (following - previous)
+            second_order = following - 2.0 * appearance + previous
+            first_context = (
+                first_context + first_weights[index] * first_order
+            )
+            second_context = (
+                second_context + second_weights[index] * second_order
+            )
+        first_context = first_context * valid
+        second_context = second_context * valid
+        motion = self.motion_fusion(torch.cat([
+            first_context, second_context
+        ], dim=1)) * valid
+        contrast = _local_contrast(appearance) * valid
+        fused = self.domain_fusion(torch.cat([
+            appearance, motion, contrast
+        ], dim=1)) * valid
+        delta = self.projection(fused)
+        output = backbone_features + delta
+        if not return_aux:
+            return output
+        return output, {
+            'raw_appearance': appearance,
+            'first_order_context': first_context,
+            'second_order_context': second_context,
+            'local_contrast': contrast,
+            'valid_frame_mask': valid_mask,
+            'first_order_scale_weights': first_weights[:, 0, :, 0, 0, 0],
+            'second_order_scale_weights': second_weights[:, 0, :, 0, 0, 0],
+            'residual_delta': delta,
+        }
 
 
 class SecondOrderMotionAdapter(nn.Module):
@@ -552,6 +778,8 @@ def build_structure_adapter(
         )
     if bottleneck_channels <= 0:
         raise ValueError('bottleneck_channels must be positive')
+    if variant == 'raw_apmd':
+        return RawAppearanceMotionAdapter(channels, bottleneck_channels)
     if variant == 'second_order':
         return SecondOrderMotionAdapter(channels, bottleneck_channels)
     if variant in {'lfp_shallow', 'lfp_deep'}:

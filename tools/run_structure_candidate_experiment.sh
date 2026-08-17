@@ -6,6 +6,21 @@ PYTHON_BIN="/home/devbox/project/model/miniconda3/envs/sjyPID/bin/python"
 DATA_ROOT="/home/devbox/project/model/sjy/CSIG2026/datasets/SatVideoIRSDT_v1"
 BASE_CHECKPOINT="$REPO_ROOT/pretrained/SatVideoIRSDT_DeepPro-Plus_pretrained_init.pth"
 MODEL="DeepPro-Plus_BRTD3"
+STRUCTURE_ADAPTER_LR="${STRUCTURE_ADAPTER_LR:-0.001}"
+STRUCTURE_BASE_LR_MULT="${STRUCTURE_BASE_LR_MULT:-0.1}"
+STRUCTURE_SEED="${STRUCTURE_SEED:-46}"
+THRESHOLD_GRID="${THRESHOLD_GRID:-0.15:0.70:0.01}"
+SWANLAB_CREDENTIAL_FILE="${SWANLAB_CREDENTIAL_FILE:-/home/devbox/project/model/.swanlab/.netrc}"
+if [[ -z "${SWANLAB_API_KEY:-}" && -r "$SWANLAB_CREDENTIAL_FILE" ]]; then
+    SWANLAB_API_KEY="$(
+        awk '$1 == "password" {print $2; exit}' "$SWANLAB_CREDENTIAL_FILE"
+    )"
+    export SWANLAB_API_KEY
+fi
+if [[ -z "${SWANLAB_API_KEY:-}" ]]; then
+    echo "SwanLab cloud credential is unavailable; refusing to train without visualization." >&2
+    exit 1
+fi
 
 if [[ $# -ne 5 ]]; then
     echo "Usage: $0 GPU VARIANT SLUG BATCH_STAMP SWANLAB_GROUP" >&2
@@ -47,8 +62,8 @@ cd "$REPO_ROOT"
     --savepath "$REPO_ROOT/log" \
     --log_dir "$EXPERIMENT_NAME" \
     --optimizer Adam \
-    --learning_rate 0.001 \
-    --base_lr_mult 0.1 \
+    --learning_rate "$STRUCTURE_ADAPTER_LR" \
+    --base_lr_mult "$STRUCTURE_BASE_LR_MULT" \
     --decay_rate 0.0001 \
     --batch_size 20 \
     --epoch 100 \
@@ -76,7 +91,7 @@ cd "$REPO_ROOT"
     --structure_max_shift 4.0 \
     --eval_chunk_rows 64 \
     --resume never \
-    --seed 46 \
+    --seed "$STRUCTURE_SEED" \
     --deterministic 0 \
     --run_test_after_train 0 \
     --use_swanlab 1 \
@@ -139,7 +154,7 @@ for selector in "${CHECKPOINT_SELECTORS[@]}"; do
         --prediction-root "$probability_dir" \
         --data-root "$DATA_ROOT" \
         --split val \
-        --thresholds 0.15:0.70:0.01 \
+        --thresholds "$THRESHOLD_GRID" \
         --min-areas 1,2,3 \
         --match-distance 2 \
         --workers 4 \

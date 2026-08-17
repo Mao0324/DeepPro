@@ -5,7 +5,11 @@ REPO_ROOT="/home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main"
 PYTHON_BIN="/home/devbox/project/model/miniconda3/envs/sjyPID/bin/python"
 DATA_ROOT="/home/devbox/project/model/sjy/CSIG2026/datasets/SatVideoIRSDT_v1"
 BASE_CHECKPOINT="$REPO_ROOT/pretrained/SatVideoIRSDT_DeepPro-Plus_pretrained_init.pth"
-DAY_ROOT="$REPO_ROOT/log/sem_seg/2026-08-11"
+EXPERIMENT_DAY="${EXPERIMENT_DAY:-2026-08-11}"
+EXPERIMENT_SEED="${EXPERIMENT_SEED:-46}"
+THRESHOLD_GRID="${THRESHOLD_GRID:-0.15:0.70:0.01}"
+SWANLAB_GROUP="${SWANLAB_GROUP:-f1_valid_frames_architecture_8gpu}"
+DAY_ROOT="$REPO_ROOT/log/sem_seg/$EXPERIMENT_DAY"
 
 if [[ $# -ne 8 ]]; then
     echo "Usage: $0 GPU MODEL SLUG BACKGROUND ADAPTIVE GATE LR BASE_LR_MULT" >&2
@@ -20,8 +24,8 @@ ADAPTIVE_TDC="$5"
 USE_GATE="$6"
 LEARNING_RATE="$7"
 BASE_LR_MULT="$8"
-EXPERIMENT_BASENAME="SatVideoIRSDT_v1__2026-08-11__ValidFrames-F1OHEM-${SLUG}_E100"
-EXPERIMENT_NAME="2026-08-11/$EXPERIMENT_BASENAME"
+EXPERIMENT_BASENAME="SatVideoIRSDT_v1__${EXPERIMENT_DAY}__ValidFrames-F1OHEM-${SLUG}_E100"
+EXPERIMENT_NAME="$EXPERIMENT_DAY/$EXPERIMENT_BASENAME"
 EXPERIMENT_DIR="$DAY_ROOT/$EXPERIMENT_BASENAME"
 STATUS_DIR="$DAY_ROOT/_pipeline_status"
 STATUS_FILE="$STATUS_DIR/${SLUG}.status"
@@ -74,12 +78,12 @@ cd "$REPO_ROOT"
     --brtd_zero_init 1 \
     --eval_chunk_rows 64 \
     --resume never \
-    --seed 46 \
+    --seed "$EXPERIMENT_SEED" \
     --deterministic 0 \
     --run_test_after_train 0 \
     --use_swanlab 1 \
     --swanlab_project CSIG2026-DeepPro \
-    --swanlab_group f1_valid_frames_architecture_8gpu \
+    --swanlab_group "$SWANLAB_GROUP" \
     --swanlab_mode cloud
 
 POST_ROOT="$EXPERIMENT_DIR/postprocess"
@@ -137,7 +141,7 @@ for selector in "${CHECKPOINT_SELECTORS[@]}"; do
         --prediction-root "$probability_dir" \
         --data-root "$DATA_ROOT" \
         --split val \
-        --thresholds 0.15:0.70:0.01 \
+        --thresholds "$THRESHOLD_GRID" \
         --min-areas 1,2,3 \
         --match-distance 2 \
         --workers 4 \

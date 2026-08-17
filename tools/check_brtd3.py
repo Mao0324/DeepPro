@@ -33,6 +33,66 @@ def parse_args():
     return parser.parse_args()
 
 
+def check_raw_apmd_padding(adapter, device, height, width):
+    """Check that loader padding cannot create appearance/motion residuals."""
+    clip_length = 5
+    total_length = clip_length * 2
+    clip = torch.randn(
+        1, 1, clip_length, height, width, device=device
+    ) + 0.25
+    raw_at_start = torch.zeros(
+        1, 1, total_length, height, width, device=device
+    )
+    raw_at_end = torch.zeros_like(raw_at_start)
+    raw_at_start[:, :, :clip_length] = clip
+    raw_at_end[:, :, clip_length:] = clip
+    features = torch.zeros(
+        1, adapter.channels, total_length, height, width,
+        device=device,
+    )
+
+    adapter.eval()
+    with torch.no_grad():
+        adapter.projection.weight.fill_(0.01)
+        start_output, start_aux = adapter(
+            features, raw_at_start, return_aux=True
+        )
+        end_output, end_aux = adapter(
+            features, raw_at_end, return_aux=True
+        )
+    valid_error = (
+        start_output[:, :, :clip_length]
+        - end_output[:, :, clip_length:]
+    ).abs().max().item()
+    padding_response = max(
+        start_output[:, :, clip_length:].abs().max().item(),
+        end_output[:, :, :clip_length].abs().max().item(),
+    )
+    first_weight_error = (
+        start_aux['first_order_scale_weights'].sum(dim=0) - 1.0
+    ).abs().max().item()
+    second_weight_error = (
+        end_aux['second_order_scale_weights'].sum(dim=0) - 1.0
+    ).abs().max().item()
+    if valid_error > 1e-6:
+        raise RuntimeError(
+            'raw_apmd depends on padding side; max error %.9g'
+            % valid_error
+        )
+    if padding_response != 0.0:
+        raise RuntimeError(
+            'raw_apmd generated residuals on padding: %.9g'
+            % padding_response
+        )
+    if max(first_weight_error, second_weight_error) > 1e-6:
+        raise RuntimeError('raw_apmd scale weights are not normalized')
+    print(
+        'raw_apmd padding PASS valid_shift_error=%.3g '
+        'padding_response=%.3g'
+        % (valid_error, padding_response)
+    )
+
+
 def main():
     args = parse_args()
     if min(
@@ -115,6 +175,10 @@ def main():
         adapter_parameters = sum(
             parameter.numel() for parameter in model.brtd.parameters()
         )
+        if variant == 'raw_apmd':
+            check_raw_apmd_padding(
+                model.brtd, args.device, args.height, args.width
+            )
         print(
             '%-18s PASS new_keys=%d adapter_params=%d '
             'loss=%.6f projection_grad=%.6f'
