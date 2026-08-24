@@ -33,7 +33,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def check_raw_apmd_padding(adapter, device, height, width):
+def check_raw_apmd_padding(adapter, device, height, width, variant):
     """Check that loader padding cannot create appearance/motion residuals."""
     clip_length = 5
     total_length = clip_length * 2
@@ -87,9 +87,9 @@ def check_raw_apmd_padding(adapter, device, height, width):
     if max(first_weight_error, second_weight_error) > 1e-6:
         raise RuntimeError('raw_apmd scale weights are not normalized')
     print(
-        'raw_apmd padding PASS valid_shift_error=%.3g '
+        '%s padding PASS valid_shift_error=%.3g '
         'padding_response=%.3g'
-        % (valid_error, padding_response)
+        % (variant, valid_error, padding_response)
     )
 
 
@@ -130,7 +130,7 @@ def main():
             args.seqlen,
             args.seqlen,
             structure_variant=variant,
-            eval_chunk_rows=max(1, args.height // 2),
+            eval_chunk_rows=0,
         )
         incompatible = model.load_state_dict(state_dict, strict=False)
         invalid_missing = [
@@ -175,10 +175,36 @@ def main():
         adapter_parameters = sum(
             parameter.numel() for parameter in model.brtd.parameters()
         )
-        if variant == 'raw_apmd':
+        if variant.startswith('raw_apmd'):
             check_raw_apmd_padding(
-                model.brtd, args.device, args.height, args.width
+                model.brtd, args.device, args.height, args.width,
+                variant,
             )
+        if 'hybrid_rms' in variant:
+            hybrid_mixes = [
+                module.channel_mix().detach().flatten()
+                for module in model.brtd.modules()
+                if isinstance(module, torch.nn.Module)
+                and hasattr(module, 'channel_mix')
+            ]
+            if not hybrid_mixes:
+                raise RuntimeError('hybrid_rms normalization was not instantiated')
+            hybrid_mix_error = (
+                torch.cat(hybrid_mixes) - 0.5
+            ).abs().max().item()
+            if hybrid_mix_error > 1e-7:
+                raise RuntimeError(
+                    'hybrid_rms initial channel mix error is %.9g'
+                    % hybrid_mix_error
+                )
+        if 'multiscale_contrast' in variant:
+            contrast_weight_error = (
+                auxiliary['contrast_scale_weights'].sum(dim=0) - 1.0
+            ).abs().max().item()
+            if contrast_weight_error > 1e-6:
+                raise RuntimeError(
+                    'raw_apmd contrast weights are not normalized'
+                )
         print(
             '%-18s PASS new_keys=%d adapter_params=%d '
             'loss=%.6f projection_grad=%.6f'

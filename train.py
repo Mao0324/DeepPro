@@ -448,7 +448,15 @@ def parse_args():
     parser.add_argument(
         '--structure_variant', type=str, default='second_order',
         choices=[
-            'raw_apmd', 'second_order', 'lfp_shallow', 'lfp_deep',
+            'raw_apmd', 'raw_apmd_rms', 'raw_apmd_channel_rms',
+            'raw_apmd_motion_detrend',
+            'raw_apmd_multiscale_contrast',
+            'raw_apmd_hybrid_rms',
+            'raw_apmd_hybrid_rms_motion_detrend',
+            'raw_apmd_hybrid_rms_multiscale_contrast',
+            'raw_apmd_hybrid_rms_motion_detrend_multiscale_contrast',
+            'second_order',
+            'lfp_shallow', 'lfp_deep',
             'global_align', 'local_align', 'multiscale_head',
             'bidirectional', 'tdc_dual_stream',
         ],
@@ -815,6 +823,11 @@ def main(args):
         log_string(
             'Resume checkpoint takes precedence over --base_ckpt; '
             'backbone initialization was skipped.'
+        )
+    elif resume_path is None:
+        log_string(
+            'Initialized %s from random weights; no base checkpoint loaded.'
+            % args.model
         )
 
     detector = detector.to(runtime.device)

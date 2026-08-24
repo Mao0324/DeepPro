@@ -10,20 +10,27 @@ STRUCTURE_ADAPTER_LR="${STRUCTURE_ADAPTER_LR:-0.001}"
 STRUCTURE_BASE_LR_MULT="${STRUCTURE_BASE_LR_MULT:-0.1}"
 STRUCTURE_SEED="${STRUCTURE_SEED:-46}"
 THRESHOLD_GRID="${THRESHOLD_GRID:-0.15:0.70:0.01}"
+STRUCTURE_INIT_MODE="${STRUCTURE_INIT_MODE:-pretrained}"
+STRUCTURE_USE_SWANLAB="${STRUCTURE_USE_SWANLAB:-0}"
+STRUCTURE_SWANLAB_MODE="${STRUCTURE_SWANLAB_MODE:-offline}"
 SWANLAB_CREDENTIAL_FILE="${SWANLAB_CREDENTIAL_FILE:-/home/devbox/project/model/.swanlab/.netrc}"
-if [[ -z "${SWANLAB_API_KEY:-}" && -r "$SWANLAB_CREDENTIAL_FILE" ]]; then
+if [[ "$STRUCTURE_USE_SWANLAB" == "1" && "$STRUCTURE_SWANLAB_MODE" == "cloud" && -z "${SWANLAB_API_KEY:-}" && -r "$SWANLAB_CREDENTIAL_FILE" ]]; then
     SWANLAB_API_KEY="$(
         awk '$1 == "password" {print $2; exit}' "$SWANLAB_CREDENTIAL_FILE"
     )"
     export SWANLAB_API_KEY
 fi
-if [[ -z "${SWANLAB_API_KEY:-}" ]]; then
-    echo "SwanLab cloud credential is unavailable; refusing to train without visualization." >&2
+if [[ "$STRUCTURE_USE_SWANLAB" == "1" && "$STRUCTURE_SWANLAB_MODE" == "cloud" && -z "${SWANLAB_API_KEY:-}" ]]; then
+    echo "SwanLab cloud credential is unavailable." >&2
     exit 1
 fi
 
 if [[ $# -ne 5 ]]; then
     echo "Usage: $0 GPU VARIANT SLUG BATCH_STAMP SWANLAB_GROUP" >&2
+    exit 2
+fi
+if [[ "$STRUCTURE_INIT_MODE" != "pretrained" && "$STRUCTURE_INIT_MODE" != "scratch" ]]; then
+    echo "STRUCTURE_INIT_MODE must be pretrained or scratch" >&2
     exit 2
 fi
 
@@ -41,8 +48,8 @@ STATUS_DIR="$DAY_ROOT/_structure_pipeline_status"
 STATUS_FILE="$STATUS_DIR/${SLUG}.status"
 
 mkdir -p "$STATUS_DIR"
-printf 'RUNNING gpu=%s variant=%s started=%s\n' \
-    "$GPU_ID" "$VARIANT" "$(date --iso-8601=seconds)" >"$STATUS_FILE"
+printf 'RUNNING gpu=%s variant=%s init=%s started=%s\n' \
+    "$GPU_ID" "$VARIANT" "$STRUCTURE_INIT_MODE" "$(date --iso-8601=seconds)" >"$STATUS_FILE"
 
 on_error() {
     local exit_code=$?
@@ -51,6 +58,12 @@ on_error() {
     exit "$exit_code"
 }
 trap on_error ERR
+
+base_checkpoint_arguments=()
+if [[ "$STRUCTURE_INIT_MODE" == "pretrained" ]]; then
+    base_checkpoint_arguments=(--base_ckpt "$BASE_CHECKPOINT")
+fi
+echo "Initialization mode: $STRUCTURE_INIT_MODE"
 
 cd "$REPO_ROOT"
 "$PYTHON_BIN" -u train.py \
@@ -85,7 +98,7 @@ cd "$REPO_ROOT"
     --tversky_fp_weight 0.6 \
     --tversky_fn_weight 0.4 \
     --hard_negative_topk 4096 \
-    --base_ckpt "$BASE_CHECKPOINT" \
+    "${base_checkpoint_arguments[@]}" \
     --structure_variant "$VARIANT" \
     --structure_bottleneck_channels 8 \
     --structure_max_shift 4.0 \
@@ -94,10 +107,10 @@ cd "$REPO_ROOT"
     --seed "$STRUCTURE_SEED" \
     --deterministic 0 \
     --run_test_after_train 0 \
-    --use_swanlab 1 \
+    --use_swanlab "$STRUCTURE_USE_SWANLAB" \
     --swanlab_project CSIG2026-DeepPro \
     --swanlab_group "$SWANLAB_GROUP" \
-    --swanlab_mode cloud
+    --swanlab_mode "$STRUCTURE_SWANLAB_MODE"
 
 POST_ROOT="$EXPERIMENT_DIR/postprocess"
 PROBABILITY_ROOT="$POST_ROOT/probabilities"
@@ -112,7 +125,7 @@ mapfile -t CHECKPOINT_SELECTORS < <(
     "$PYTHON_BIN" tools/select_eval_checkpoints.py \
         --log-file "$MODEL_LOG" \
         --checkpoint-dir "$CHECKPOINT_DIR" \
-        --top-k 3 \
+        --top-k 5 \
         --output-json "$RESULT_ROOT/checkpoint_candidates.json"
 )
 

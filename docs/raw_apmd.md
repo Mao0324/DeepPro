@@ -72,18 +72,18 @@ Run the focused sanity check:
 
 ## Training and submission
 
-Do not start this while the current eight-GPU batch is running.  When one GPU
-is idle, the following launcher uses Screen, `sjyPID`, 100 epochs, SwanLab,
-date-grouped logs, validation checkpoint/threshold/min-area selection, tracked
-TXT generation, ZIP validation, and SHA-256 output:
+Future controlled comparisons use exactly two fixed paired seeds (47 and 49).
+The launcher uses GPUs 0 and 1, Screen, `sjyPID`, at most 100 epochs with early
+stopping, SwanLab, date-grouped logs, Top-5 validation checkpoint selection,
+tracked TXT generation, ZIP validation, and SHA-256 output:
 
 ```bash
-bash tools/launch_raw_apmd_experiment.sh GPU_ID
+bash tools/launch_raw_apmd_rms_2gpu.sh
 ```
 
-The first controlled run uses adapter LR `0.001`, pretrained backbone LR
-`0.005` (`base_lr_mult=5.0`), seed 46, `f1_calibrated_ohem`, and valid-frame
-masking.  This matches the successful plain DeepPro backbone learning-rate
-scale while giving the new residual branch a conservative rate.  Its result
-must be judged by centroid F1, precision, and recall under the same sweep—not
-by the final epoch or pixel IoU alone.
+The RMS experiment changes only the adapter's framewise normalization.  It
+keeps adapter LR `0.001`, pretrained backbone LR `0.005`
+(`base_lr_mult=5.0`), `f1_calibrated_ohem`, and valid-frame masking.  Judge
+it by paired centroid F1, precision, and recall—not by the final epoch or pixel
+IoU alone.  See `docs/experiment_analysis_2026-08-20.md` for the acceptance
+rule and experiment order.

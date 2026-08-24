@@ -1,0 +1,1265 @@
+2026-08-22 08:27:41,966 - Model-rank0 - INFO - PARAMETER ...
+2026-08-22 08:27:41,966 - Model-rank0 - INFO - Namespace(base_ckpt='/home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/pretrained/SatVideoIRSDT_DeepPro-Plus_pretrained_init.pth', base_lr_mult=5.0, batch_size=20, bce_weight=0.5, brtd_adaptive_tdc=1, brtd_use_background=1, brtd_use_gate=1, brtd_zero_init=1, datapath='/home/devbox/project/model/sjy/CSIG2026/datasets/SatVideoIRSDT_v1', dataset='SatVideoIRSDT_v1', decay_rate=0.0001, deterministic=0, early_stopping_metric='eval_f1', early_stopping_min_delta=0.0001, early_stopping_patience=30, early_stopping_start_epoch=15, epoch=100, eval_chunk_rows=64, focal_alpha=0.75, focal_gamma=2.0, freeze_pretrained=1, gpu='4', gpu_num=1, hard_focal_weight=0.25, hard_negative_topk=4096, learning_rate=0.001, log_dir='2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100', loss='f1_calibrated_ohem', loss_eps=1.0, lr_decay=0.7, mask_padded_frames=1, model='DeepPro-Plus_BRTD3', optimizer='Adam', patch_size=128, prefetch_factor=2, resume='never', resume_checkpoint=None, run_test_after_train=0, sample_rate=0.04, savepath='/home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log', seed=47, seqlen=40, sls_eps=1e-06, sls_location_weight=1.0, sls_warmup_epochs=5, spatial_ckpt='', st_ckpt='', stc_center_weight=0.1, stc_temporal_weight=0.05, stc_warmup_epochs=5, step_size=10, structure_bottleneck_channels=8, structure_max_shift=4.0, structure_variant='raw_apmd_hybrid_rms_multiscale_contrast', swanlab_group='f1_hybrid_rms_init_ablation_seed47_2026-08-22_08-27-32', swanlab_id=None, swanlab_mode='offline', swanlab_project='CSIG2026-DeepPro', swanlab_resume='never', swanlab_workspace=None, tda_dilation=3, tda_mean_contrast=0.0, tda_mean_size=0.0, tda_weight=0.2, threshold_eval=0.5, train_workers=4, tversky_fn_weight=0.4, tversky_fp_weight=0.6, tversky_gamma=1.33, use_swanlab=0, val_workers=2)
+2026-08-22 08:27:41,966 - Model-rank0 - INFO - start loading training data ...
+2026-08-22 08:27:45,547 - Model-rank0 - INFO - start loading validation data ...
+2026-08-22 08:27:46,750 - Model-rank0 - INFO - The number of training data is: 3850
+2026-08-22 08:27:46,750 - Model-rank0 - INFO - The number of test data is: 255 sequences
+2026-08-22 08:27:46,750 - Model-rank0 - INFO - DDP world_size=1, global_batch=20, per_rank_batch=20; DataLoader workers per rank=4, validation=2
+2026-08-22 08:27:46,824 - Model-rank0 - INFO - Initialized DeepPro-Plus_BRTD3 backbone from /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/pretrained/SatVideoIRSDT_DeepPro-Plus_pretrained_init.pth; new adapter keys: 16
+2026-08-22 08:27:48,531 - Model-rank0 - INFO - Loss: f1_calibrated_ohem - Tversky+Dice+自适应困难负样本Margin，面向F1与低虚警
+2026-08-22 08:27:48,532 - Model-rank0 - INFO - Optimizer groups: 64 backbone tensors at 5.000x LR; 16 BRTD tensors at 1.000x LR.
+2026-08-22 08:27:49,355 - Model-rank0 - INFO - Starting a new experiment from scratch.
+2026-08-22 08:27:49,355 - Model-rank0 - INFO - Early stopping enabled: metric=eval_f1 mode=max patience=30 min_delta=0.00010000 start_epoch=15.
+2026-08-22 08:27:49,434 - Model-rank0 - INFO - CUDA memory after checkpoint loading: allocated=0.000 GiB, reserved=0.002 GiB
+2026-08-22 08:27:49,434 - Model-rank0 - INFO - **** Epoch 1/100 ****
+2026-08-22 08:27:49,434 - Model-rank0 - INFO - Learning rate:0.001000
+2026-08-22 08:39:27,184 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 08:39:27,184 - Model-rank0 - INFO - Training mean loss: 0.371576
+2026-08-22 08:39:27,184 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.350546
+2026-08-22 08:39:27,184 - Model-rank0 - INFO - Training pixel precision: 0.721929
+2026-08-22 08:39:27,184 - Model-rank0 - INFO - Training pixel recall: 0.405266
+2026-08-22 08:39:27,184 - Model-rank0 - INFO - Training pixel F1: 0.519118
+2026-08-22 08:39:27,185 - Model-rank0 - INFO - Training loss component tversky: 0.318558
+2026-08-22 08:39:27,185 - Model-rank0 - INFO - Training loss component dice: 0.353455
+2026-08-22 08:39:27,185 - Model-rank0 - INFO - Training loss component hard_margin: 4.384124
+2026-08-22 08:39:27,185 - Model-rank0 - INFO - Training loss component hard_weight: 0.000000
+2026-08-22 08:39:27,185 - Model-rank0 - INFO - ---- EPOCH 001 EVALUATION ----
+2026-08-22 08:46:15,418 - Model-rank0 - INFO - Eval mean loss: 0.590092
+2026-08-22 08:46:15,419 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.266623
+2026-08-22 08:46:15,419 - Model-rank0 - INFO - Eval pixel precision: 0.701709
+2026-08-22 08:46:15,419 - Model-rank0 - INFO - Eval pixel recall: 0.300705
+2026-08-22 08:46:15,419 - Model-rank0 - INFO - Eval pixel F1: 0.420999
+2026-08-22 08:46:15,419 - Model-rank0 - INFO - Early stopping eval_f1=0.420999; best=0.420999 at epoch 1; bad_epochs=0/30.
+2026-08-22 08:46:15,446 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 08:46:15,467 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_1_model.pth
+2026-08-22 08:46:15,491 - Model-rank0 - INFO - Saved best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/best_model.pth
+2026-08-22 08:46:15,512 - Model-rank0 - INFO - Saved early-stopping best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/early_stopping_best_model.pth
+2026-08-22 08:46:15,513 - Model-rank0 - INFO - Best mIoU_mid: 0.266623
+2026-08-22 08:46:15,716 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 08:46:15,717 - Model-rank0 - INFO - **** Epoch 2/100 ****
+2026-08-22 08:46:15,717 - Model-rank0 - INFO - Learning rate:0.001000
+2026-08-22 08:58:10,930 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 08:58:10,930 - Model-rank0 - INFO - Training mean loss: 0.370827
+2026-08-22 08:58:10,930 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.341837
+2026-08-22 08:58:10,930 - Model-rank0 - INFO - Training pixel precision: 0.712019
+2026-08-22 08:58:10,930 - Model-rank0 - INFO - Training pixel recall: 0.396682
+2026-08-22 08:58:10,930 - Model-rank0 - INFO - Training pixel F1: 0.509506
+2026-08-22 08:58:10,931 - Model-rank0 - INFO - Training loss component tversky: 0.318145
+2026-08-22 08:58:10,931 - Model-rank0 - INFO - Training loss component dice: 0.351212
+2026-08-22 08:58:10,931 - Model-rank0 - INFO - Training loss component hard_margin: 4.882397
+2026-08-22 08:58:10,931 - Model-rank0 - INFO - Training loss component hard_weight: 0.000000
+2026-08-22 08:58:10,931 - Model-rank0 - INFO - ---- EPOCH 002 EVALUATION ----
+2026-08-22 09:03:11,011 - Model-rank0 - INFO - Eval mean loss: 0.612868
+2026-08-22 09:03:11,012 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.254790
+2026-08-22 09:03:11,012 - Model-rank0 - INFO - Eval pixel precision: 0.703535
+2026-08-22 09:03:11,012 - Model-rank0 - INFO - Eval pixel recall: 0.285437
+2026-08-22 09:03:11,012 - Model-rank0 - INFO - Eval pixel F1: 0.406108
+2026-08-22 09:03:11,012 - Model-rank0 - INFO - Early stopping eval_f1=0.406108; best=0.420999 at epoch 1; bad_epochs=0/30.
+2026-08-22 09:03:11,047 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 09:03:11,047 - Model-rank0 - INFO - Best mIoU_mid: 0.266623
+2026-08-22 09:03:11,307 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 09:03:11,308 - Model-rank0 - INFO - **** Epoch 3/100 ****
+2026-08-22 09:03:11,308 - Model-rank0 - INFO - Learning rate:0.001000
+2026-08-22 09:14:52,872 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 09:14:52,872 - Model-rank0 - INFO - Training mean loss: 0.361781
+2026-08-22 09:14:52,872 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.354201
+2026-08-22 09:14:52,872 - Model-rank0 - INFO - Training pixel precision: 0.737687
+2026-08-22 09:14:52,872 - Model-rank0 - INFO - Training pixel recall: 0.405241
+2026-08-22 09:14:52,872 - Model-rank0 - INFO - Training pixel F1: 0.523114
+2026-08-22 09:14:52,872 - Model-rank0 - INFO - Training loss component tversky: 0.310276
+2026-08-22 09:14:52,872 - Model-rank0 - INFO - Training loss component dice: 0.343365
+2026-08-22 09:14:52,872 - Model-rank0 - INFO - Training loss component hard_margin: 4.864056
+2026-08-22 09:14:52,872 - Model-rank0 - INFO - Training loss component hard_weight: 0.000000
+2026-08-22 09:14:52,873 - Model-rank0 - INFO - ---- EPOCH 003 EVALUATION ----
+2026-08-22 09:19:49,169 - Model-rank0 - INFO - Eval mean loss: 0.623517
+2026-08-22 09:19:49,169 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.216517
+2026-08-22 09:19:49,169 - Model-rank0 - INFO - Eval pixel precision: 0.500256
+2026-08-22 09:19:49,169 - Model-rank0 - INFO - Eval pixel recall: 0.276273
+2026-08-22 09:19:49,169 - Model-rank0 - INFO - Eval pixel F1: 0.355962
+2026-08-22 09:19:49,169 - Model-rank0 - INFO - Early stopping eval_f1=0.355962; best=0.420999 at epoch 1; bad_epochs=0/30.
+2026-08-22 09:19:49,200 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 09:19:49,200 - Model-rank0 - INFO - Best mIoU_mid: 0.266623
+2026-08-22 09:19:49,458 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 09:19:49,458 - Model-rank0 - INFO - **** Epoch 4/100 ****
+2026-08-22 09:19:49,458 - Model-rank0 - INFO - Learning rate:0.001000
+2026-08-22 09:31:58,749 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 09:31:58,749 - Model-rank0 - INFO - Training mean loss: 0.358888
+2026-08-22 09:31:58,749 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.359368
+2026-08-22 09:31:58,750 - Model-rank0 - INFO - Training pixel precision: 0.753519
+2026-08-22 09:31:58,750 - Model-rank0 - INFO - Training pixel recall: 0.407240
+2026-08-22 09:31:58,750 - Model-rank0 - INFO - Training pixel F1: 0.528728
+2026-08-22 09:31:58,750 - Model-rank0 - INFO - Training loss component tversky: 0.307853
+2026-08-22 09:31:58,750 - Model-rank0 - INFO - Training loss component dice: 0.340234
+2026-08-22 09:31:58,750 - Model-rank0 - INFO - Training loss component hard_margin: 5.167455
+2026-08-22 09:31:58,750 - Model-rank0 - INFO - Training loss component hard_weight: 0.000000
+2026-08-22 09:31:58,750 - Model-rank0 - INFO - ---- EPOCH 004 EVALUATION ----
+2026-08-22 09:37:03,037 - Model-rank0 - INFO - Eval mean loss: 0.575416
+2026-08-22 09:37:03,037 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.237663
+2026-08-22 09:37:03,037 - Model-rank0 - INFO - Eval pixel precision: 0.503302
+2026-08-22 09:37:03,037 - Model-rank0 - INFO - Eval pixel recall: 0.310486
+2026-08-22 09:37:03,037 - Model-rank0 - INFO - Eval pixel F1: 0.384051
+2026-08-22 09:37:03,038 - Model-rank0 - INFO - Early stopping eval_f1=0.384051; best=0.420999 at epoch 1; bad_epochs=0/30.
+2026-08-22 09:37:03,076 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 09:37:03,076 - Model-rank0 - INFO - Best mIoU_mid: 0.266623
+2026-08-22 09:37:03,320 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 09:37:03,320 - Model-rank0 - INFO - **** Epoch 5/100 ****
+2026-08-22 09:37:03,320 - Model-rank0 - INFO - Learning rate:0.001000
+2026-08-22 09:48:17,911 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 09:48:17,911 - Model-rank0 - INFO - Training mean loss: 0.345815
+2026-08-22 09:48:17,911 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.371698
+2026-08-22 09:48:17,911 - Model-rank0 - INFO - Training pixel precision: 0.761535
+2026-08-22 09:48:17,911 - Model-rank0 - INFO - Training pixel recall: 0.420659
+2026-08-22 09:48:17,911 - Model-rank0 - INFO - Training pixel F1: 0.541953
+2026-08-22 09:48:17,911 - Model-rank0 - INFO - Training loss component tversky: 0.296576
+2026-08-22 09:48:17,911 - Model-rank0 - INFO - Training loss component dice: 0.328261
+2026-08-22 09:48:17,911 - Model-rank0 - INFO - Training loss component hard_margin: 4.737085
+2026-08-22 09:48:17,911 - Model-rank0 - INFO - Training loss component hard_weight: 0.000000
+2026-08-22 09:48:17,911 - Model-rank0 - INFO - ---- EPOCH 005 EVALUATION ----
+2026-08-22 09:53:17,622 - Model-rank0 - INFO - Eval mean loss: 0.565171
+2026-08-22 09:53:17,622 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.286954
+2026-08-22 09:53:17,622 - Model-rank0 - INFO - Eval pixel precision: 0.812249
+2026-08-22 09:53:17,622 - Model-rank0 - INFO - Eval pixel recall: 0.307340
+2026-08-22 09:53:17,623 - Model-rank0 - INFO - Eval pixel F1: 0.445943
+2026-08-22 09:53:17,623 - Model-rank0 - INFO - Early stopping eval_f1=0.445943; best=0.445943 at epoch 5; bad_epochs=0/30.
+2026-08-22 09:53:17,650 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 09:53:17,671 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_5_model.pth
+2026-08-22 09:53:17,695 - Model-rank0 - INFO - Saved best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/best_model.pth
+2026-08-22 09:53:17,719 - Model-rank0 - INFO - Saved early-stopping best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/early_stopping_best_model.pth
+2026-08-22 09:53:17,719 - Model-rank0 - INFO - Best mIoU_mid: 0.286954
+2026-08-22 09:53:17,901 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 09:53:17,901 - Model-rank0 - INFO - **** Epoch 6/100 ****
+2026-08-22 09:53:17,901 - Model-rank0 - INFO - Learning rate:0.001000
+2026-08-22 10:04:17,110 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 10:04:17,110 - Model-rank0 - INFO - Training mean loss: 0.380867
+2026-08-22 10:04:17,110 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.371267
+2026-08-22 10:04:17,110 - Model-rank0 - INFO - Training pixel precision: 0.772365
+2026-08-22 10:04:17,110 - Model-rank0 - INFO - Training pixel recall: 0.416883
+2026-08-22 10:04:17,110 - Model-rank0 - INFO - Training pixel F1: 0.541495
+2026-08-22 10:04:17,110 - Model-rank0 - INFO - Training loss component tversky: 0.304966
+2026-08-22 10:04:17,110 - Model-rank0 - INFO - Training loss component dice: 0.337042
+2026-08-22 10:04:17,110 - Model-rank0 - INFO - Training loss component hard_margin: 2.534455
+2026-08-22 10:04:17,110 - Model-rank0 - INFO - Training loss component hard_weight: 0.010000
+2026-08-22 10:04:17,110 - Model-rank0 - INFO - ---- EPOCH 006 EVALUATION ----
+2026-08-22 10:09:17,025 - Model-rank0 - INFO - Eval mean loss: 0.597647
+2026-08-22 10:09:17,025 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.274951
+2026-08-22 10:09:17,025 - Model-rank0 - INFO - Eval pixel precision: 0.655254
+2026-08-22 10:09:17,025 - Model-rank0 - INFO - Eval pixel recall: 0.321452
+2026-08-22 10:09:17,025 - Model-rank0 - INFO - Eval pixel F1: 0.431312
+2026-08-22 10:09:17,025 - Model-rank0 - INFO - Early stopping eval_f1=0.431312; best=0.445943 at epoch 5; bad_epochs=0/30.
+2026-08-22 10:09:17,051 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 10:09:17,051 - Model-rank0 - INFO - Best mIoU_mid: 0.286954
+2026-08-22 10:09:17,208 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 10:09:17,208 - Model-rank0 - INFO - **** Epoch 7/100 ****
+2026-08-22 10:09:17,208 - Model-rank0 - INFO - Learning rate:0.001000
+2026-08-22 10:20:22,253 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 10:20:22,253 - Model-rank0 - INFO - Training mean loss: 0.388942
+2026-08-22 10:20:22,253 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.388682
+2026-08-22 10:20:22,253 - Model-rank0 - INFO - Training pixel precision: 0.775330
+2026-08-22 10:20:22,253 - Model-rank0 - INFO - Training pixel recall: 0.438016
+2026-08-22 10:20:22,253 - Model-rank0 - INFO - Training pixel F1: 0.559786
+2026-08-22 10:20:22,253 - Model-rank0 - INFO - Training loss component tversky: 0.300881
+2026-08-22 10:20:22,253 - Model-rank0 - INFO - Training loss component dice: 0.332399
+2026-08-22 10:20:22,253 - Model-rank0 - INFO - Training loss component hard_margin: 1.910027
+2026-08-22 10:20:22,253 - Model-rank0 - INFO - Training loss component hard_weight: 0.020000
+2026-08-22 10:20:22,253 - Model-rank0 - INFO - ---- EPOCH 007 EVALUATION ----
+2026-08-22 10:25:21,955 - Model-rank0 - INFO - Eval mean loss: 0.600200
+2026-08-22 10:25:21,955 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.305164
+2026-08-22 10:25:21,955 - Model-rank0 - INFO - Eval pixel precision: 0.760849
+2026-08-22 10:25:21,955 - Model-rank0 - INFO - Eval pixel recall: 0.337540
+2026-08-22 10:25:21,955 - Model-rank0 - INFO - Eval pixel F1: 0.467625
+2026-08-22 10:25:21,955 - Model-rank0 - INFO - Early stopping eval_f1=0.467625; best=0.467625 at epoch 7; bad_epochs=0/30.
+2026-08-22 10:25:21,985 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 10:25:22,008 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_7_model.pth
+2026-08-22 10:25:22,031 - Model-rank0 - INFO - Saved best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/best_model.pth
+2026-08-22 10:25:22,055 - Model-rank0 - INFO - Saved early-stopping best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/early_stopping_best_model.pth
+2026-08-22 10:25:22,055 - Model-rank0 - INFO - Best mIoU_mid: 0.305164
+2026-08-22 10:25:22,278 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 10:25:22,278 - Model-rank0 - INFO - **** Epoch 8/100 ****
+2026-08-22 10:25:22,278 - Model-rank0 - INFO - Learning rate:0.001000
+2026-08-22 10:36:34,172 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 10:36:34,172 - Model-rank0 - INFO - Training mean loss: 0.391586
+2026-08-22 10:36:34,172 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.398135
+2026-08-22 10:36:34,172 - Model-rank0 - INFO - Training pixel precision: 0.777959
+2026-08-22 10:36:34,172 - Model-rank0 - INFO - Training pixel recall: 0.449177
+2026-08-22 10:36:34,172 - Model-rank0 - INFO - Training pixel F1: 0.569523
+2026-08-22 10:36:34,172 - Model-rank0 - INFO - Training loss component tversky: 0.292153
+2026-08-22 10:36:34,172 - Model-rank0 - INFO - Training loss component dice: 0.322662
+2026-08-22 10:36:34,172 - Model-rank0 - INFO - Training loss component hard_margin: 1.701149
+2026-08-22 10:36:34,172 - Model-rank0 - INFO - Training loss component hard_weight: 0.030000
+2026-08-22 10:36:34,172 - Model-rank0 - INFO - ---- EPOCH 008 EVALUATION ----
+2026-08-22 10:41:37,212 - Model-rank0 - INFO - Eval mean loss: 0.616415
+2026-08-22 10:41:37,213 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.295420
+2026-08-22 10:41:37,213 - Model-rank0 - INFO - Eval pixel precision: 0.553238
+2026-08-22 10:41:37,213 - Model-rank0 - INFO - Eval pixel recall: 0.387978
+2026-08-22 10:41:37,213 - Model-rank0 - INFO - Eval pixel F1: 0.456100
+2026-08-22 10:41:37,213 - Model-rank0 - INFO - Early stopping eval_f1=0.456100; best=0.467625 at epoch 7; bad_epochs=0/30.
+2026-08-22 10:41:37,243 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 10:41:37,244 - Model-rank0 - INFO - Best mIoU_mid: 0.305164
+2026-08-22 10:41:37,498 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 10:41:37,499 - Model-rank0 - INFO - **** Epoch 9/100 ****
+2026-08-22 10:41:37,499 - Model-rank0 - INFO - Learning rate:0.001000
+2026-08-22 10:52:42,308 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 10:52:42,309 - Model-rank0 - INFO - Training mean loss: 0.406284
+2026-08-22 10:52:42,309 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.385924
+2026-08-22 10:52:42,309 - Model-rank0 - INFO - Training pixel precision: 0.782333
+2026-08-22 10:52:42,309 - Model-rank0 - INFO - Training pixel recall: 0.432347
+2026-08-22 10:52:42,309 - Model-rank0 - INFO - Training pixel F1: 0.556919
+2026-08-22 10:52:42,309 - Model-rank0 - INFO - Training loss component tversky: 0.293928
+2026-08-22 10:52:42,309 - Model-rank0 - INFO - Training loss component dice: 0.324263
+2026-08-22 10:52:42,309 - Model-rank0 - INFO - Training loss component hard_margin: 1.592908
+2026-08-22 10:52:42,309 - Model-rank0 - INFO - Training loss component hard_weight: 0.040000
+2026-08-22 10:52:42,309 - Model-rank0 - INFO - ---- EPOCH 009 EVALUATION ----
+2026-08-22 10:57:44,520 - Model-rank0 - INFO - Eval mean loss: 0.642307
+2026-08-22 10:57:44,520 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.307523
+2026-08-22 10:57:44,520 - Model-rank0 - INFO - Eval pixel precision: 0.706354
+2026-08-22 10:57:44,520 - Model-rank0 - INFO - Eval pixel recall: 0.352600
+2026-08-22 10:57:44,520 - Model-rank0 - INFO - Eval pixel F1: 0.470390
+2026-08-22 10:57:44,520 - Model-rank0 - INFO - Early stopping eval_f1=0.470390; best=0.470390 at epoch 9; bad_epochs=0/30.
+2026-08-22 10:57:44,552 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 10:57:44,576 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_9_model.pth
+2026-08-22 10:57:44,601 - Model-rank0 - INFO - Saved best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/best_model.pth
+2026-08-22 10:57:44,628 - Model-rank0 - INFO - Saved early-stopping best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/early_stopping_best_model.pth
+2026-08-22 10:57:44,628 - Model-rank0 - INFO - Best mIoU_mid: 0.307523
+2026-08-22 10:57:44,811 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 10:57:44,811 - Model-rank0 - INFO - **** Epoch 10/100 ****
+2026-08-22 10:57:44,811 - Model-rank0 - INFO - Learning rate:0.001000
+2026-08-22 11:09:06,490 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 11:09:06,491 - Model-rank0 - INFO - Training mean loss: 0.408756
+2026-08-22 11:09:06,491 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.393820
+2026-08-22 11:09:06,491 - Model-rank0 - INFO - Training pixel precision: 0.781061
+2026-08-22 11:09:06,491 - Model-rank0 - INFO - Training pixel recall: 0.442689
+2026-08-22 11:09:06,491 - Model-rank0 - INFO - Training pixel F1: 0.565094
+2026-08-22 11:09:06,491 - Model-rank0 - INFO - Training loss component tversky: 0.287655
+2026-08-22 11:09:06,492 - Model-rank0 - INFO - Training loss component dice: 0.317016
+2026-08-22 11:09:06,492 - Model-rank0 - INFO - Training loss component hard_margin: 1.470956
+2026-08-22 11:09:06,492 - Model-rank0 - INFO - Training loss component hard_weight: 0.050000
+2026-08-22 11:09:06,492 - Model-rank0 - INFO - ---- EPOCH 010 EVALUATION ----
+2026-08-22 11:14:10,064 - Model-rank0 - INFO - Eval mean loss: 0.652826
+2026-08-22 11:14:10,065 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.321950
+2026-08-22 11:14:10,065 - Model-rank0 - INFO - Eval pixel precision: 0.735028
+2026-08-22 11:14:10,065 - Model-rank0 - INFO - Eval pixel recall: 0.364222
+2026-08-22 11:14:10,065 - Model-rank0 - INFO - Eval pixel F1: 0.487084
+2026-08-22 11:14:10,065 - Model-rank0 - INFO - Early stopping eval_f1=0.487084; best=0.487084 at epoch 10; bad_epochs=0/30.
+2026-08-22 11:14:10,095 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 11:14:10,124 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_10_model.pth
+2026-08-22 11:14:10,152 - Model-rank0 - INFO - Saved best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/best_model.pth
+2026-08-22 11:14:10,178 - Model-rank0 - INFO - Saved early-stopping best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/early_stopping_best_model.pth
+2026-08-22 11:14:10,179 - Model-rank0 - INFO - Best mIoU_mid: 0.321950
+2026-08-22 11:14:10,384 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 11:14:10,384 - Model-rank0 - INFO - **** Epoch 11/100 ****
+2026-08-22 11:14:10,385 - Model-rank0 - INFO - Learning rate:0.000700
+2026-08-22 11:25:50,127 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 11:25:50,128 - Model-rank0 - INFO - Training mean loss: 0.408375
+2026-08-22 11:25:50,128 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.419384
+2026-08-22 11:25:50,128 - Model-rank0 - INFO - Training pixel precision: 0.788424
+2026-08-22 11:25:50,128 - Model-rank0 - INFO - Training pixel recall: 0.472568
+2026-08-22 11:25:50,128 - Model-rank0 - INFO - Training pixel F1: 0.590938
+2026-08-22 11:25:50,128 - Model-rank0 - INFO - Training loss component tversky: 0.280900
+2026-08-22 11:25:50,128 - Model-rank0 - INFO - Training loss component dice: 0.308804
+2026-08-22 11:25:50,128 - Model-rank0 - INFO - Training loss component hard_margin: 1.352572
+2026-08-22 11:25:50,128 - Model-rank0 - INFO - Training loss component hard_weight: 0.060000
+2026-08-22 11:25:50,128 - Model-rank0 - INFO - ---- EPOCH 011 EVALUATION ----
+2026-08-22 11:30:54,585 - Model-rank0 - INFO - Eval mean loss: 0.703259
+2026-08-22 11:30:54,585 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.296749
+2026-08-22 11:30:54,585 - Model-rank0 - INFO - Eval pixel precision: 0.679200
+2026-08-22 11:30:54,586 - Model-rank0 - INFO - Eval pixel recall: 0.345121
+2026-08-22 11:30:54,586 - Model-rank0 - INFO - Eval pixel F1: 0.457681
+2026-08-22 11:30:54,586 - Model-rank0 - INFO - Early stopping eval_f1=0.457681; best=0.487084 at epoch 10; bad_epochs=0/30.
+2026-08-22 11:30:54,615 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 11:30:54,615 - Model-rank0 - INFO - Best mIoU_mid: 0.321950
+2026-08-22 11:30:54,774 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 11:30:54,775 - Model-rank0 - INFO - **** Epoch 12/100 ****
+2026-08-22 11:30:54,775 - Model-rank0 - INFO - Learning rate:0.000700
+2026-08-22 11:42:16,157 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 11:42:16,157 - Model-rank0 - INFO - Training mean loss: 0.427367
+2026-08-22 11:42:16,157 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.420945
+2026-08-22 11:42:16,157 - Model-rank0 - INFO - Training pixel precision: 0.786451
+2026-08-22 11:42:16,157 - Model-rank0 - INFO - Training pixel recall: 0.475269
+2026-08-22 11:42:16,157 - Model-rank0 - INFO - Training pixel F1: 0.592486
+2026-08-22 11:42:16,157 - Model-rank0 - INFO - Training loss component tversky: 0.286403
+2026-08-22 11:42:16,157 - Model-rank0 - INFO - Training loss component dice: 0.315864
+2026-08-22 11:42:16,157 - Model-rank0 - INFO - Training loss component hard_margin: 1.336921
+2026-08-22 11:42:16,157 - Model-rank0 - INFO - Training loss component hard_weight: 0.070000
+2026-08-22 11:42:16,157 - Model-rank0 - INFO - ---- EPOCH 012 EVALUATION ----
+2026-08-22 11:47:20,414 - Model-rank0 - INFO - Eval mean loss: 0.725743
+2026-08-22 11:47:20,415 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.301163
+2026-08-22 11:47:20,415 - Model-rank0 - INFO - Eval pixel precision: 0.765732
+2026-08-22 11:47:20,415 - Model-rank0 - INFO - Eval pixel recall: 0.331728
+2026-08-22 11:47:20,415 - Model-rank0 - INFO - Eval pixel F1: 0.462914
+2026-08-22 11:47:20,415 - Model-rank0 - INFO - Early stopping eval_f1=0.462914; best=0.487084 at epoch 10; bad_epochs=0/30.
+2026-08-22 11:47:20,444 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 11:47:20,445 - Model-rank0 - INFO - Best mIoU_mid: 0.321950
+2026-08-22 11:47:20,665 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 11:47:20,665 - Model-rank0 - INFO - **** Epoch 13/100 ****
+2026-08-22 11:47:20,665 - Model-rank0 - INFO - Learning rate:0.000700
+2026-08-22 11:58:50,295 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 11:58:50,296 - Model-rank0 - INFO - Training mean loss: 0.419289
+2026-08-22 11:58:50,296 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.434243
+2026-08-22 11:58:50,296 - Model-rank0 - INFO - Training pixel precision: 0.780597
+2026-08-22 11:58:50,296 - Model-rank0 - INFO - Training pixel recall: 0.494612
+2026-08-22 11:58:50,296 - Model-rank0 - INFO - Training pixel F1: 0.605536
+2026-08-22 11:58:50,296 - Model-rank0 - INFO - Training loss component tversky: 0.274746
+2026-08-22 11:58:50,296 - Model-rank0 - INFO - Training loss component dice: 0.301993
+2026-08-22 11:58:50,296 - Model-rank0 - INFO - Training loss component hard_margin: 1.240555
+2026-08-22 11:58:50,296 - Model-rank0 - INFO - Training loss component hard_weight: 0.080000
+2026-08-22 11:58:50,296 - Model-rank0 - INFO - ---- EPOCH 013 EVALUATION ----
+2026-08-22 12:03:53,093 - Model-rank0 - INFO - Eval mean loss: 0.715399
+2026-08-22 12:03:53,093 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.315659
+2026-08-22 12:03:53,093 - Model-rank0 - INFO - Eval pixel precision: 0.691012
+2026-08-22 12:03:53,093 - Model-rank0 - INFO - Eval pixel recall: 0.367536
+2026-08-22 12:03:53,093 - Model-rank0 - INFO - Eval pixel F1: 0.479850
+2026-08-22 12:03:53,093 - Model-rank0 - INFO - Early stopping eval_f1=0.479850; best=0.487084 at epoch 10; bad_epochs=0/30.
+2026-08-22 12:03:53,124 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 12:03:53,124 - Model-rank0 - INFO - Best mIoU_mid: 0.321950
+2026-08-22 12:03:53,357 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 12:03:53,358 - Model-rank0 - INFO - **** Epoch 14/100 ****
+2026-08-22 12:03:53,358 - Model-rank0 - INFO - Learning rate:0.000700
+2026-08-22 12:14:34,434 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 12:14:34,434 - Model-rank0 - INFO - Training mean loss: 0.416013
+2026-08-22 12:14:34,434 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.460055
+2026-08-22 12:14:34,434 - Model-rank0 - INFO - Training pixel precision: 0.788344
+2026-08-22 12:14:34,434 - Model-rank0 - INFO - Training pixel recall: 0.524887
+2026-08-22 12:14:34,434 - Model-rank0 - INFO - Training pixel F1: 0.630189
+2026-08-22 12:14:34,434 - Model-rank0 - INFO - Training loss component tversky: 0.266471
+2026-08-22 12:14:34,434 - Model-rank0 - INFO - Training loss component dice: 0.293123
+2026-08-22 12:14:34,434 - Model-rank0 - INFO - Training loss component hard_margin: 1.173048
+2026-08-22 12:14:34,434 - Model-rank0 - INFO - Training loss component hard_weight: 0.090000
+2026-08-22 12:14:34,434 - Model-rank0 - INFO - ---- EPOCH 014 EVALUATION ----
+2026-08-22 12:19:40,970 - Model-rank0 - INFO - Eval mean loss: 0.763961
+2026-08-22 12:19:40,970 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.305398
+2026-08-22 12:19:40,970 - Model-rank0 - INFO - Eval pixel precision: 0.706067
+2026-08-22 12:19:40,970 - Model-rank0 - INFO - Eval pixel recall: 0.349881
+2026-08-22 12:19:40,970 - Model-rank0 - INFO - Eval pixel F1: 0.467900
+2026-08-22 12:19:40,970 - Model-rank0 - INFO - Early stopping eval_f1=0.467900; best=0.487084 at epoch 10; bad_epochs=0/30.
+2026-08-22 12:19:40,998 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 12:19:40,999 - Model-rank0 - INFO - Best mIoU_mid: 0.321950
+2026-08-22 12:19:41,250 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 12:19:41,251 - Model-rank0 - INFO - **** Epoch 15/100 ****
+2026-08-22 12:19:41,251 - Model-rank0 - INFO - Learning rate:0.000700
+2026-08-22 12:31:35,794 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.453 GiB
+2026-08-22 12:31:35,794 - Model-rank0 - INFO - Training mean loss: 0.432220
+2026-08-22 12:31:35,794 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.447266
+2026-08-22 12:31:35,794 - Model-rank0 - INFO - Training pixel precision: 0.782464
+2026-08-22 12:31:35,794 - Model-rank0 - INFO - Training pixel recall: 0.510779
+2026-08-22 12:31:35,794 - Model-rank0 - INFO - Training pixel F1: 0.618084
+2026-08-22 12:31:35,794 - Model-rank0 - INFO - Training loss component tversky: 0.270863
+2026-08-22 12:31:35,794 - Model-rank0 - INFO - Training loss component dice: 0.298024
+2026-08-22 12:31:35,794 - Model-rank0 - INFO - Training loss component hard_margin: 1.166541
+2026-08-22 12:31:35,794 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 12:31:35,794 - Model-rank0 - INFO - ---- EPOCH 015 EVALUATION ----
+2026-08-22 12:36:45,260 - Model-rank0 - INFO - Eval mean loss: 0.764276
+2026-08-22 12:36:45,261 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.322901
+2026-08-22 12:36:45,261 - Model-rank0 - INFO - Eval pixel precision: 0.699947
+2026-08-22 12:36:45,261 - Model-rank0 - INFO - Eval pixel recall: 0.374779
+2026-08-22 12:36:45,261 - Model-rank0 - INFO - Eval pixel F1: 0.488172
+2026-08-22 12:36:45,261 - Model-rank0 - INFO - Early stopping eval_f1=0.488172; best=0.488172 at epoch 15; bad_epochs=0/30.
+2026-08-22 12:36:45,288 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 12:36:45,307 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_15_model.pth
+2026-08-22 12:36:45,328 - Model-rank0 - INFO - Saved best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/best_model.pth
+2026-08-22 12:36:45,349 - Model-rank0 - INFO - Saved early-stopping best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/early_stopping_best_model.pth
+2026-08-22 12:36:45,350 - Model-rank0 - INFO - Best mIoU_mid: 0.322901
+2026-08-22 12:36:45,468 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 12:36:45,468 - Model-rank0 - INFO - **** Epoch 16/100 ****
+2026-08-22 12:36:45,468 - Model-rank0 - INFO - Learning rate:0.000700
+2026-08-22 12:47:23,558 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 12:47:23,558 - Model-rank0 - INFO - Training mean loss: 0.440940
+2026-08-22 12:47:23,559 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.425930
+2026-08-22 12:47:23,559 - Model-rank0 - INFO - Training pixel precision: 0.792281
+2026-08-22 12:47:23,559 - Model-rank0 - INFO - Training pixel recall: 0.479473
+2026-08-22 12:47:23,559 - Model-rank0 - INFO - Training pixel F1: 0.597407
+2026-08-22 12:47:23,559 - Model-rank0 - INFO - Training loss component tversky: 0.276341
+2026-08-22 12:47:23,559 - Model-rank0 - INFO - Training loss component dice: 0.303493
+2026-08-22 12:47:23,559 - Model-rank0 - INFO - Training loss component hard_margin: 1.190742
+2026-08-22 12:47:23,559 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 12:47:23,559 - Model-rank0 - INFO - ---- EPOCH 016 EVALUATION ----
+2026-08-22 12:52:30,624 - Model-rank0 - INFO - Eval mean loss: 0.762494
+2026-08-22 12:52:30,625 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.331638
+2026-08-22 12:52:30,625 - Model-rank0 - INFO - Eval pixel precision: 0.779671
+2026-08-22 12:52:30,625 - Model-rank0 - INFO - Eval pixel recall: 0.365933
+2026-08-22 12:52:30,625 - Model-rank0 - INFO - Eval pixel F1: 0.498091
+2026-08-22 12:52:30,625 - Model-rank0 - INFO - Early stopping eval_f1=0.498091; best=0.498091 at epoch 16; bad_epochs=0/30.
+2026-08-22 12:52:30,658 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 12:52:30,679 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_16_model.pth
+2026-08-22 12:52:30,702 - Model-rank0 - INFO - Saved best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/best_model.pth
+2026-08-22 12:52:30,726 - Model-rank0 - INFO - Saved early-stopping best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/early_stopping_best_model.pth
+2026-08-22 12:52:30,726 - Model-rank0 - INFO - Best mIoU_mid: 0.331638
+2026-08-22 12:52:30,936 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 12:52:30,937 - Model-rank0 - INFO - **** Epoch 17/100 ****
+2026-08-22 12:52:30,937 - Model-rank0 - INFO - Learning rate:0.000700
+2026-08-22 13:03:35,506 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 13:03:35,506 - Model-rank0 - INFO - Training mean loss: 0.422053
+2026-08-22 13:03:35,506 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.434781
+2026-08-22 13:03:35,506 - Model-rank0 - INFO - Training pixel precision: 0.791988
+2026-08-22 13:03:35,506 - Model-rank0 - INFO - Training pixel recall: 0.490831
+2026-08-22 13:03:35,506 - Model-rank0 - INFO - Training pixel F1: 0.606060
+2026-08-22 13:03:35,506 - Model-rank0 - INFO - Training loss component tversky: 0.266466
+2026-08-22 13:03:35,506 - Model-rank0 - INFO - Training loss component dice: 0.291793
+2026-08-22 13:03:35,506 - Model-rank0 - INFO - Training loss component hard_margin: 1.118176
+2026-08-22 13:03:35,506 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 13:03:35,506 - Model-rank0 - INFO - ---- EPOCH 017 EVALUATION ----
+2026-08-22 13:08:41,784 - Model-rank0 - INFO - Eval mean loss: 0.743236
+2026-08-22 13:08:41,784 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.337846
+2026-08-22 13:08:41,784 - Model-rank0 - INFO - Eval pixel precision: 0.743603
+2026-08-22 13:08:41,784 - Model-rank0 - INFO - Eval pixel recall: 0.382390
+2026-08-22 13:08:41,784 - Model-rank0 - INFO - Eval pixel F1: 0.505059
+2026-08-22 13:08:41,784 - Model-rank0 - INFO - Early stopping eval_f1=0.505059; best=0.505059 at epoch 17; bad_epochs=0/30.
+2026-08-22 13:08:41,810 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 13:08:41,829 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_17_model.pth
+2026-08-22 13:08:41,849 - Model-rank0 - INFO - Saved best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/best_model.pth
+2026-08-22 13:08:41,868 - Model-rank0 - INFO - Saved early-stopping best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/early_stopping_best_model.pth
+2026-08-22 13:08:41,868 - Model-rank0 - INFO - Best mIoU_mid: 0.337846
+2026-08-22 13:08:41,967 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 13:08:41,967 - Model-rank0 - INFO - **** Epoch 18/100 ****
+2026-08-22 13:08:41,967 - Model-rank0 - INFO - Learning rate:0.000700
+2026-08-22 13:19:15,140 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 13:19:15,140 - Model-rank0 - INFO - Training mean loss: 0.426522
+2026-08-22 13:19:15,140 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.442690
+2026-08-22 13:19:15,140 - Model-rank0 - INFO - Training pixel precision: 0.789238
+2026-08-22 13:19:15,140 - Model-rank0 - INFO - Training pixel recall: 0.502040
+2026-08-22 13:19:15,140 - Model-rank0 - INFO - Training pixel F1: 0.613701
+2026-08-22 13:19:15,140 - Model-rank0 - INFO - Training loss component tversky: 0.269612
+2026-08-22 13:19:15,141 - Model-rank0 - INFO - Training loss component dice: 0.295165
+2026-08-22 13:19:15,141 - Model-rank0 - INFO - Training loss component hard_margin: 1.126348
+2026-08-22 13:19:15,141 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 13:19:15,141 - Model-rank0 - INFO - ---- EPOCH 018 EVALUATION ----
+2026-08-22 13:24:21,241 - Model-rank0 - INFO - Eval mean loss: 0.749384
+2026-08-22 13:24:21,241 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.341025
+2026-08-22 13:24:21,241 - Model-rank0 - INFO - Eval pixel precision: 0.754760
+2026-08-22 13:24:21,241 - Model-rank0 - INFO - Eval pixel recall: 0.383522
+2026-08-22 13:24:21,241 - Model-rank0 - INFO - Eval pixel F1: 0.508603
+2026-08-22 13:24:21,242 - Model-rank0 - INFO - Early stopping eval_f1=0.508603; best=0.508603 at epoch 18; bad_epochs=0/30.
+2026-08-22 13:24:21,268 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 13:24:21,289 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_18_model.pth
+2026-08-22 13:24:21,312 - Model-rank0 - INFO - Saved best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/best_model.pth
+2026-08-22 13:24:21,336 - Model-rank0 - INFO - Saved early-stopping best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/early_stopping_best_model.pth
+2026-08-22 13:24:21,336 - Model-rank0 - INFO - Best mIoU_mid: 0.341025
+2026-08-22 13:24:21,459 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 13:24:21,460 - Model-rank0 - INFO - **** Epoch 19/100 ****
+2026-08-22 13:24:21,460 - Model-rank0 - INFO - Learning rate:0.000700
+2026-08-22 13:35:01,540 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 13:35:01,540 - Model-rank0 - INFO - Training mean loss: 0.412903
+2026-08-22 13:35:01,540 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.455036
+2026-08-22 13:35:01,540 - Model-rank0 - INFO - Training pixel precision: 0.797058
+2026-08-22 13:35:01,540 - Model-rank0 - INFO - Training pixel recall: 0.514664
+2026-08-22 13:35:01,540 - Model-rank0 - INFO - Training pixel F1: 0.625464
+2026-08-22 13:35:01,540 - Model-rank0 - INFO - Training loss component tversky: 0.261275
+2026-08-22 13:35:01,540 - Model-rank0 - INFO - Training loss component dice: 0.286764
+2026-08-22 13:35:01,540 - Model-rank0 - INFO - Training loss component hard_margin: 1.086135
+2026-08-22 13:35:01,540 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 13:35:01,540 - Model-rank0 - INFO - ---- EPOCH 019 EVALUATION ----
+2026-08-22 13:40:08,115 - Model-rank0 - INFO - Eval mean loss: 0.748658
+2026-08-22 13:40:08,116 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.336063
+2026-08-22 13:40:08,116 - Model-rank0 - INFO - Eval pixel precision: 0.712834
+2026-08-22 13:40:08,116 - Model-rank0 - INFO - Eval pixel recall: 0.388685
+2026-08-22 13:40:08,116 - Model-rank0 - INFO - Eval pixel F1: 0.503065
+2026-08-22 13:40:08,116 - Model-rank0 - INFO - Early stopping eval_f1=0.503065; best=0.508603 at epoch 18; bad_epochs=1/30.
+2026-08-22 13:40:08,146 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 13:40:08,146 - Model-rank0 - INFO - Best mIoU_mid: 0.341025
+2026-08-22 13:40:08,331 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 13:40:08,331 - Model-rank0 - INFO - **** Epoch 20/100 ****
+2026-08-22 13:40:08,331 - Model-rank0 - INFO - Learning rate:0.000700
+2026-08-22 13:50:24,583 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 13:50:24,583 - Model-rank0 - INFO - Training mean loss: 0.416829
+2026-08-22 13:50:24,583 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.447170
+2026-08-22 13:50:24,583 - Model-rank0 - INFO - Training pixel precision: 0.783916
+2026-08-22 13:50:24,583 - Model-rank0 - INFO - Training pixel recall: 0.510038
+2026-08-22 13:50:24,583 - Model-rank0 - INFO - Training pixel F1: 0.617992
+2026-08-22 13:50:24,583 - Model-rank0 - INFO - Training loss component tversky: 0.264183
+2026-08-22 13:50:24,583 - Model-rank0 - INFO - Training loss component dice: 0.289621
+2026-08-22 13:50:24,583 - Model-rank0 - INFO - Training loss component hard_margin: 1.092030
+2026-08-22 13:50:24,583 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 13:50:24,583 - Model-rank0 - INFO - ---- EPOCH 020 EVALUATION ----
+2026-08-22 13:55:31,369 - Model-rank0 - INFO - Eval mean loss: 0.789618
+2026-08-22 13:55:31,369 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.317850
+2026-08-22 13:55:31,369 - Model-rank0 - INFO - Eval pixel precision: 0.791389
+2026-08-22 13:55:31,369 - Model-rank0 - INFO - Eval pixel recall: 0.346916
+2026-08-22 13:55:31,369 - Model-rank0 - INFO - Eval pixel F1: 0.482376
+2026-08-22 13:55:31,369 - Model-rank0 - INFO - Early stopping eval_f1=0.482376; best=0.508603 at epoch 18; bad_epochs=2/30.
+2026-08-22 13:55:31,397 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 13:55:31,418 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_20_model.pth
+2026-08-22 13:55:31,418 - Model-rank0 - INFO - Best mIoU_mid: 0.341025
+2026-08-22 13:55:31,557 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 13:55:31,557 - Model-rank0 - INFO - **** Epoch 21/100 ****
+2026-08-22 13:55:31,558 - Model-rank0 - INFO - Learning rate:0.000490
+2026-08-22 14:06:09,541 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 14:06:09,542 - Model-rank0 - INFO - Training mean loss: 0.383270
+2026-08-22 14:06:09,542 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.497873
+2026-08-22 14:06:09,542 - Model-rank0 - INFO - Training pixel precision: 0.778249
+2026-08-22 14:06:09,542 - Model-rank0 - INFO - Training pixel recall: 0.580179
+2026-08-22 14:06:09,542 - Model-rank0 - INFO - Training pixel F1: 0.664774
+2026-08-22 14:06:09,542 - Model-rank0 - INFO - Training loss component tversky: 0.240262
+2026-08-22 14:06:09,542 - Model-rank0 - INFO - Training loss component dice: 0.265338
+2026-08-22 14:06:09,542 - Model-rank0 - INFO - Training loss component hard_margin: 1.032073
+2026-08-22 14:06:09,542 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 14:06:09,542 - Model-rank0 - INFO - ---- EPOCH 021 EVALUATION ----
+2026-08-22 14:11:26,988 - Model-rank0 - INFO - Eval mean loss: 0.773174
+2026-08-22 14:11:26,988 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.316835
+2026-08-22 14:11:26,988 - Model-rank0 - INFO - Eval pixel precision: 0.768278
+2026-08-22 14:11:26,988 - Model-rank0 - INFO - Eval pixel recall: 0.350311
+2026-08-22 14:11:26,988 - Model-rank0 - INFO - Eval pixel F1: 0.481206
+2026-08-22 14:11:26,988 - Model-rank0 - INFO - Early stopping eval_f1=0.481206; best=0.508603 at epoch 18; bad_epochs=3/30.
+2026-08-22 14:11:27,015 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 14:11:27,015 - Model-rank0 - INFO - Best mIoU_mid: 0.341025
+2026-08-22 14:11:27,131 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 14:11:27,132 - Model-rank0 - INFO - **** Epoch 22/100 ****
+2026-08-22 14:11:27,132 - Model-rank0 - INFO - Learning rate:0.000490
+2026-08-22 14:22:32,312 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 14:22:32,312 - Model-rank0 - INFO - Training mean loss: 0.381150
+2026-08-22 14:22:32,312 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.501857
+2026-08-22 14:22:32,313 - Model-rank0 - INFO - Training pixel precision: 0.793626
+2026-08-22 14:22:32,313 - Model-rank0 - INFO - Training pixel recall: 0.577181
+2026-08-22 14:22:32,313 - Model-rank0 - INFO - Training pixel F1: 0.668315
+2026-08-22 14:22:32,313 - Model-rank0 - INFO - Training loss component tversky: 0.237892
+2026-08-22 14:22:32,313 - Model-rank0 - INFO - Training loss component dice: 0.263712
+2026-08-22 14:22:32,313 - Model-rank0 - INFO - Training loss component hard_margin: 1.037013
+2026-08-22 14:22:32,313 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 14:22:32,313 - Model-rank0 - INFO - ---- EPOCH 022 EVALUATION ----
+2026-08-22 14:27:47,582 - Model-rank0 - INFO - Eval mean loss: 0.761119
+2026-08-22 14:27:47,582 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.329920
+2026-08-22 14:27:47,583 - Model-rank0 - INFO - Eval pixel precision: 0.812614
+2026-08-22 14:27:47,583 - Model-rank0 - INFO - Eval pixel recall: 0.357086
+2026-08-22 14:27:47,583 - Model-rank0 - INFO - Eval pixel F1: 0.496150
+2026-08-22 14:27:47,583 - Model-rank0 - INFO - Early stopping eval_f1=0.496150; best=0.508603 at epoch 18; bad_epochs=4/30.
+2026-08-22 14:27:47,611 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 14:27:47,611 - Model-rank0 - INFO - Best mIoU_mid: 0.341025
+2026-08-22 14:27:47,719 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 14:27:47,719 - Model-rank0 - INFO - **** Epoch 23/100 ****
+2026-08-22 14:27:47,719 - Model-rank0 - INFO - Learning rate:0.000490
+2026-08-22 14:38:27,002 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 14:38:27,003 - Model-rank0 - INFO - Training mean loss: 0.360911
+2026-08-22 14:38:27,003 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.527904
+2026-08-22 14:38:27,003 - Model-rank0 - INFO - Training pixel precision: 0.803023
+2026-08-22 14:38:27,003 - Model-rank0 - INFO - Training pixel recall: 0.606431
+2026-08-22 14:38:27,003 - Model-rank0 - INFO - Training pixel F1: 0.691017
+2026-08-22 14:38:27,003 - Model-rank0 - INFO - Training loss component tversky: 0.226883
+2026-08-22 14:38:27,003 - Model-rank0 - INFO - Training loss component dice: 0.250966
+2026-08-22 14:38:27,003 - Model-rank0 - INFO - Training loss component hard_margin: 0.963836
+2026-08-22 14:38:27,003 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 14:38:27,003 - Model-rank0 - INFO - ---- EPOCH 023 EVALUATION ----
+2026-08-22 14:43:51,959 - Model-rank0 - INFO - Eval mean loss: 0.760268
+2026-08-22 14:43:51,959 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.319715
+2026-08-22 14:43:51,959 - Model-rank0 - INFO - Eval pixel precision: 0.736308
+2026-08-22 14:43:51,959 - Model-rank0 - INFO - Eval pixel recall: 0.361055
+2026-08-22 14:43:51,959 - Model-rank0 - INFO - Eval pixel F1: 0.484521
+2026-08-22 14:43:51,959 - Model-rank0 - INFO - Early stopping eval_f1=0.484521; best=0.508603 at epoch 18; bad_epochs=5/30.
+2026-08-22 14:43:51,996 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 14:43:51,996 - Model-rank0 - INFO - Best mIoU_mid: 0.341025
+2026-08-22 14:43:52,156 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 14:43:52,157 - Model-rank0 - INFO - **** Epoch 24/100 ****
+2026-08-22 14:43:52,157 - Model-rank0 - INFO - Learning rate:0.000490
+2026-08-22 14:55:19,884 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 14:55:19,884 - Model-rank0 - INFO - Training mean loss: 0.365923
+2026-08-22 14:55:19,884 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.531329
+2026-08-22 14:55:19,885 - Model-rank0 - INFO - Training pixel precision: 0.801533
+2026-08-22 14:55:19,885 - Model-rank0 - INFO - Training pixel recall: 0.611821
+2026-08-22 14:55:19,885 - Model-rank0 - INFO - Training pixel F1: 0.693945
+2026-08-22 14:55:19,885 - Model-rank0 - INFO - Training loss component tversky: 0.230608
+2026-08-22 14:55:19,885 - Model-rank0 - INFO - Training loss component dice: 0.254814
+2026-08-22 14:55:19,885 - Model-rank0 - INFO - Training loss component hard_margin: 0.970924
+2026-08-22 14:55:19,885 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 14:55:19,885 - Model-rank0 - INFO - ---- EPOCH 024 EVALUATION ----
+2026-08-22 15:00:27,881 - Model-rank0 - INFO - Eval mean loss: 0.743295
+2026-08-22 15:00:27,882 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.345038
+2026-08-22 15:00:27,882 - Model-rank0 - INFO - Eval pixel precision: 0.787756
+2026-08-22 15:00:27,882 - Model-rank0 - INFO - Eval pixel recall: 0.380401
+2026-08-22 15:00:27,882 - Model-rank0 - INFO - Eval pixel F1: 0.513053
+2026-08-22 15:00:27,882 - Model-rank0 - INFO - Early stopping eval_f1=0.513053; best=0.513053 at epoch 24; bad_epochs=0/30.
+2026-08-22 15:00:27,911 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 15:00:27,931 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_24_model.pth
+2026-08-22 15:00:27,952 - Model-rank0 - INFO - Saved best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/best_model.pth
+2026-08-22 15:00:27,972 - Model-rank0 - INFO - Saved early-stopping best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/early_stopping_best_model.pth
+2026-08-22 15:00:27,972 - Model-rank0 - INFO - Best mIoU_mid: 0.345038
+2026-08-22 15:00:28,109 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 15:00:28,109 - Model-rank0 - INFO - **** Epoch 25/100 ****
+2026-08-22 15:00:28,109 - Model-rank0 - INFO - Learning rate:0.000490
+2026-08-22 15:11:08,151 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 15:11:08,151 - Model-rank0 - INFO - Training mean loss: 0.355809
+2026-08-22 15:11:08,151 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.543604
+2026-08-22 15:11:08,151 - Model-rank0 - INFO - Training pixel precision: 0.810222
+2026-08-22 15:11:08,151 - Model-rank0 - INFO - Training pixel recall: 0.622919
+2026-08-22 15:11:08,152 - Model-rank0 - INFO - Training pixel F1: 0.704331
+2026-08-22 15:11:08,152 - Model-rank0 - INFO - Training loss component tversky: 0.222070
+2026-08-22 15:11:08,152 - Model-rank0 - INFO - Training loss component dice: 0.246403
+2026-08-22 15:11:08,152 - Model-rank0 - INFO - Training loss component hard_margin: 0.967780
+2026-08-22 15:11:08,152 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 15:11:08,152 - Model-rank0 - INFO - ---- EPOCH 025 EVALUATION ----
+2026-08-22 15:16:20,554 - Model-rank0 - INFO - Eval mean loss: 0.739577
+2026-08-22 15:16:20,555 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.350066
+2026-08-22 15:16:20,555 - Model-rank0 - INFO - Eval pixel precision: 0.703433
+2026-08-22 15:16:20,555 - Model-rank0 - INFO - Eval pixel recall: 0.410676
+2026-08-22 15:16:20,555 - Model-rank0 - INFO - Eval pixel F1: 0.518591
+2026-08-22 15:16:20,555 - Model-rank0 - INFO - Early stopping eval_f1=0.518591; best=0.518591 at epoch 25; bad_epochs=0/30.
+2026-08-22 15:16:20,594 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 15:16:20,620 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_25_model.pth
+2026-08-22 15:16:20,651 - Model-rank0 - INFO - Saved best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/best_model.pth
+2026-08-22 15:16:20,677 - Model-rank0 - INFO - Saved early-stopping best checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/early_stopping_best_model.pth
+2026-08-22 15:16:20,678 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 15:16:20,855 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 15:16:20,855 - Model-rank0 - INFO - **** Epoch 26/100 ****
+2026-08-22 15:16:20,856 - Model-rank0 - INFO - Learning rate:0.000490
+2026-08-22 15:27:15,858 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 15:27:15,858 - Model-rank0 - INFO - Training mean loss: 0.349088
+2026-08-22 15:27:15,858 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.551372
+2026-08-22 15:27:15,858 - Model-rank0 - INFO - Training pixel precision: 0.812390
+2026-08-22 15:27:15,858 - Model-rank0 - INFO - Training pixel recall: 0.631823
+2026-08-22 15:27:15,858 - Model-rank0 - INFO - Training pixel F1: 0.710818
+2026-08-22 15:27:15,858 - Model-rank0 - INFO - Training loss component tversky: 0.219512
+2026-08-22 15:27:15,858 - Model-rank0 - INFO - Training loss component dice: 0.242438
+2026-08-22 15:27:15,858 - Model-rank0 - INFO - Training loss component hard_margin: 0.932095
+2026-08-22 15:27:15,859 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 15:27:15,859 - Model-rank0 - INFO - ---- EPOCH 026 EVALUATION ----
+2026-08-22 15:32:30,216 - Model-rank0 - INFO - Eval mean loss: 0.764724
+2026-08-22 15:32:30,216 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.315439
+2026-08-22 15:32:30,216 - Model-rank0 - INFO - Eval pixel precision: 0.722352
+2026-08-22 15:32:30,216 - Model-rank0 - INFO - Eval pixel recall: 0.358961
+2026-08-22 15:32:30,216 - Model-rank0 - INFO - Eval pixel F1: 0.479596
+2026-08-22 15:32:30,217 - Model-rank0 - INFO - Early stopping eval_f1=0.479596; best=0.518591 at epoch 25; bad_epochs=1/30.
+2026-08-22 15:32:30,252 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 15:32:30,252 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 15:32:30,371 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 15:32:30,371 - Model-rank0 - INFO - **** Epoch 27/100 ****
+2026-08-22 15:32:30,371 - Model-rank0 - INFO - Learning rate:0.000490
+2026-08-22 15:43:04,889 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 15:43:04,889 - Model-rank0 - INFO - Training mean loss: 0.357906
+2026-08-22 15:43:04,889 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.545639
+2026-08-22 15:43:04,889 - Model-rank0 - INFO - Training pixel precision: 0.805431
+2026-08-22 15:43:04,889 - Model-rank0 - INFO - Training pixel recall: 0.628479
+2026-08-22 15:43:04,889 - Model-rank0 - INFO - Training pixel F1: 0.706037
+2026-08-22 15:43:04,889 - Model-rank0 - INFO - Training loss component tversky: 0.225342
+2026-08-22 15:43:04,889 - Model-rank0 - INFO - Training loss component dice: 0.248709
+2026-08-22 15:43:04,889 - Model-rank0 - INFO - Training loss component hard_margin: 0.952576
+2026-08-22 15:43:04,889 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 15:43:04,889 - Model-rank0 - INFO - ---- EPOCH 027 EVALUATION ----
+2026-08-22 15:48:19,124 - Model-rank0 - INFO - Eval mean loss: 0.752359
+2026-08-22 15:48:19,124 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.327049
+2026-08-22 15:48:19,124 - Model-rank0 - INFO - Eval pixel precision: 0.721054
+2026-08-22 15:48:19,124 - Model-rank0 - INFO - Eval pixel recall: 0.374421
+2026-08-22 15:48:19,124 - Model-rank0 - INFO - Eval pixel F1: 0.492896
+2026-08-22 15:48:19,124 - Model-rank0 - INFO - Early stopping eval_f1=0.492896; best=0.518591 at epoch 25; bad_epochs=2/30.
+2026-08-22 15:48:19,155 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 15:48:19,156 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 15:48:19,348 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 15:48:19,348 - Model-rank0 - INFO - **** Epoch 28/100 ****
+2026-08-22 15:48:19,348 - Model-rank0 - INFO - Learning rate:0.000490
+2026-08-22 15:59:01,393 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 15:59:01,393 - Model-rank0 - INFO - Training mean loss: 0.354760
+2026-08-22 15:59:01,393 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.551476
+2026-08-22 15:59:01,393 - Model-rank0 - INFO - Training pixel precision: 0.809553
+2026-08-22 15:59:01,393 - Model-rank0 - INFO - Training pixel recall: 0.633687
+2026-08-22 15:59:01,393 - Model-rank0 - INFO - Training pixel F1: 0.710905
+2026-08-22 15:59:01,394 - Model-rank0 - INFO - Training loss component tversky: 0.222407
+2026-08-22 15:59:01,394 - Model-rank0 - INFO - Training loss component dice: 0.246127
+2026-08-22 15:59:01,394 - Model-rank0 - INFO - Training loss component hard_margin: 0.954345
+2026-08-22 15:59:01,394 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 15:59:01,394 - Model-rank0 - INFO - ---- EPOCH 028 EVALUATION ----
+2026-08-22 16:04:16,747 - Model-rank0 - INFO - Eval mean loss: 0.762998
+2026-08-22 16:04:16,748 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.335472
+2026-08-22 16:04:16,748 - Model-rank0 - INFO - Eval pixel precision: 0.762875
+2026-08-22 16:04:16,748 - Model-rank0 - INFO - Eval pixel recall: 0.374525
+2026-08-22 16:04:16,748 - Model-rank0 - INFO - Eval pixel F1: 0.502402
+2026-08-22 16:04:16,748 - Model-rank0 - INFO - Early stopping eval_f1=0.502402; best=0.518591 at epoch 25; bad_epochs=3/30.
+2026-08-22 16:04:16,780 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 16:04:16,780 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 16:04:16,920 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 16:04:16,920 - Model-rank0 - INFO - **** Epoch 29/100 ****
+2026-08-22 16:04:16,920 - Model-rank0 - INFO - Learning rate:0.000490
+2026-08-22 16:15:06,494 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 16:15:06,494 - Model-rank0 - INFO - Training mean loss: 0.351469
+2026-08-22 16:15:06,494 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.552803
+2026-08-22 16:15:06,494 - Model-rank0 - INFO - Training pixel precision: 0.808798
+2026-08-22 16:15:06,494 - Model-rank0 - INFO - Training pixel recall: 0.635905
+2026-08-22 16:15:06,494 - Model-rank0 - INFO - Training pixel F1: 0.712006
+2026-08-22 16:15:06,494 - Model-rank0 - INFO - Training loss component tversky: 0.220385
+2026-08-22 16:15:06,494 - Model-rank0 - INFO - Training loss component dice: 0.243343
+2026-08-22 16:15:06,495 - Model-rank0 - INFO - Training loss component hard_margin: 0.945828
+2026-08-22 16:15:06,495 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 16:15:06,495 - Model-rank0 - INFO - ---- EPOCH 029 EVALUATION ----
+2026-08-22 16:20:16,603 - Model-rank0 - INFO - Eval mean loss: 0.761772
+2026-08-22 16:20:16,603 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.319939
+2026-08-22 16:20:16,603 - Model-rank0 - INFO - Eval pixel precision: 0.699601
+2026-08-22 16:20:16,603 - Model-rank0 - INFO - Eval pixel recall: 0.370890
+2026-08-22 16:20:16,603 - Model-rank0 - INFO - Eval pixel F1: 0.484778
+2026-08-22 16:20:16,603 - Model-rank0 - INFO - Early stopping eval_f1=0.484778; best=0.518591 at epoch 25; bad_epochs=4/30.
+2026-08-22 16:20:16,633 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 16:20:16,633 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 16:20:16,793 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 16:20:16,793 - Model-rank0 - INFO - **** Epoch 30/100 ****
+2026-08-22 16:20:16,793 - Model-rank0 - INFO - Learning rate:0.000490
+2026-08-22 16:31:11,409 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 16:31:11,410 - Model-rank0 - INFO - Training mean loss: 0.356438
+2026-08-22 16:31:11,410 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.549641
+2026-08-22 16:31:11,410 - Model-rank0 - INFO - Training pixel precision: 0.796191
+2026-08-22 16:31:11,410 - Model-rank0 - INFO - Training pixel recall: 0.639636
+2026-08-22 16:31:11,410 - Model-rank0 - INFO - Training pixel F1: 0.709379
+2026-08-22 16:31:11,410 - Model-rank0 - INFO - Training loss component tversky: 0.222858
+2026-08-22 16:31:11,410 - Model-rank0 - INFO - Training loss component dice: 0.246487
+2026-08-22 16:31:11,410 - Model-rank0 - INFO - Training loss component hard_margin: 0.966074
+2026-08-22 16:31:11,410 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 16:31:11,410 - Model-rank0 - INFO - ---- EPOCH 030 EVALUATION ----
+2026-08-22 16:36:28,413 - Model-rank0 - INFO - Eval mean loss: 0.750584
+2026-08-22 16:36:28,413 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.330266
+2026-08-22 16:36:28,413 - Model-rank0 - INFO - Eval pixel precision: 0.731869
+2026-08-22 16:36:28,413 - Model-rank0 - INFO - Eval pixel recall: 0.375729
+2026-08-22 16:36:28,413 - Model-rank0 - INFO - Eval pixel F1: 0.496542
+2026-08-22 16:36:28,413 - Model-rank0 - INFO - Early stopping eval_f1=0.496542; best=0.518591 at epoch 25; bad_epochs=5/30.
+2026-08-22 16:36:28,447 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 16:36:28,468 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_30_model.pth
+2026-08-22 16:36:28,468 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 16:36:28,595 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 16:36:28,595 - Model-rank0 - INFO - **** Epoch 31/100 ****
+2026-08-22 16:36:28,595 - Model-rank0 - INFO - Learning rate:0.000343
+2026-08-22 16:47:04,890 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 16:47:04,890 - Model-rank0 - INFO - Training mean loss: 0.338760
+2026-08-22 16:47:04,890 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.568148
+2026-08-22 16:47:04,890 - Model-rank0 - INFO - Training pixel precision: 0.821027
+2026-08-22 16:47:04,890 - Model-rank0 - INFO - Training pixel recall: 0.648459
+2026-08-22 16:47:04,890 - Model-rank0 - INFO - Training pixel F1: 0.724610
+2026-08-22 16:47:04,890 - Model-rank0 - INFO - Training loss component tversky: 0.213195
+2026-08-22 16:47:04,890 - Model-rank0 - INFO - Training loss component dice: 0.235723
+2026-08-22 16:47:04,890 - Model-rank0 - INFO - Training loss component hard_margin: 0.902064
+2026-08-22 16:47:04,891 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 16:47:04,891 - Model-rank0 - INFO - ---- EPOCH 031 EVALUATION ----
+2026-08-22 16:52:22,091 - Model-rank0 - INFO - Eval mean loss: 0.745098
+2026-08-22 16:52:22,091 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.332007
+2026-08-22 16:52:22,091 - Model-rank0 - INFO - Eval pixel precision: 0.658436
+2026-08-22 16:52:22,091 - Model-rank0 - INFO - Eval pixel recall: 0.401085
+2026-08-22 16:52:22,091 - Model-rank0 - INFO - Eval pixel F1: 0.498506
+2026-08-22 16:52:22,091 - Model-rank0 - INFO - Early stopping eval_f1=0.498506; best=0.518591 at epoch 25; bad_epochs=6/30.
+2026-08-22 16:52:22,125 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 16:52:22,125 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 16:52:22,293 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 16:52:22,294 - Model-rank0 - INFO - **** Epoch 32/100 ****
+2026-08-22 16:52:22,294 - Model-rank0 - INFO - Learning rate:0.000343
+2026-08-22 17:03:22,046 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 17:03:22,046 - Model-rank0 - INFO - Training mean loss: 0.339267
+2026-08-22 17:03:22,046 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.563918
+2026-08-22 17:03:22,046 - Model-rank0 - INFO - Training pixel precision: 0.818541
+2026-08-22 17:03:22,046 - Model-rank0 - INFO - Training pixel recall: 0.644487
+2026-08-22 17:03:22,046 - Model-rank0 - INFO - Training pixel F1: 0.721161
+2026-08-22 17:03:22,046 - Model-rank0 - INFO - Training loss component tversky: 0.214142
+2026-08-22 17:03:22,046 - Model-rank0 - INFO - Training loss component dice: 0.236423
+2026-08-22 17:03:22,047 - Model-rank0 - INFO - Training loss component hard_margin: 0.896609
+2026-08-22 17:03:22,047 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 17:03:22,047 - Model-rank0 - INFO - ---- EPOCH 032 EVALUATION ----
+2026-08-22 17:08:38,996 - Model-rank0 - INFO - Eval mean loss: 0.761019
+2026-08-22 17:08:38,997 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.320640
+2026-08-22 17:08:38,997 - Model-rank0 - INFO - Eval pixel precision: 0.717413
+2026-08-22 17:08:38,997 - Model-rank0 - INFO - Eval pixel recall: 0.366991
+2026-08-22 17:08:38,997 - Model-rank0 - INFO - Eval pixel F1: 0.485583
+2026-08-22 17:08:38,997 - Model-rank0 - INFO - Early stopping eval_f1=0.485583; best=0.518591 at epoch 25; bad_epochs=7/30.
+2026-08-22 17:08:39,024 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 17:08:39,025 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 17:08:39,162 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 17:08:39,162 - Model-rank0 - INFO - **** Epoch 33/100 ****
+2026-08-22 17:08:39,162 - Model-rank0 - INFO - Learning rate:0.000343
+2026-08-22 17:19:25,525 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 17:19:25,525 - Model-rank0 - INFO - Training mean loss: 0.339822
+2026-08-22 17:19:25,525 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.563131
+2026-08-22 17:19:25,526 - Model-rank0 - INFO - Training pixel precision: 0.815930
+2026-08-22 17:19:25,526 - Model-rank0 - INFO - Training pixel recall: 0.645082
+2026-08-22 17:19:25,526 - Model-rank0 - INFO - Training pixel F1: 0.720517
+2026-08-22 17:19:25,526 - Model-rank0 - INFO - Training loss component tversky: 0.214747
+2026-08-22 17:19:25,526 - Model-rank0 - INFO - Training loss component dice: 0.236979
+2026-08-22 17:19:25,526 - Model-rank0 - INFO - Training loss component hard_margin: 0.895278
+2026-08-22 17:19:25,526 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 17:19:25,526 - Model-rank0 - INFO - ---- EPOCH 033 EVALUATION ----
+2026-08-22 17:24:42,527 - Model-rank0 - INFO - Eval mean loss: 0.751587
+2026-08-22 17:24:42,528 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.337616
+2026-08-22 17:24:42,528 - Model-rank0 - INFO - Eval pixel precision: 0.722681
+2026-08-22 17:24:42,528 - Model-rank0 - INFO - Eval pixel recall: 0.387866
+2026-08-22 17:24:42,528 - Model-rank0 - INFO - Eval pixel F1: 0.504802
+2026-08-22 17:24:42,528 - Model-rank0 - INFO - Early stopping eval_f1=0.504802; best=0.518591 at epoch 25; bad_epochs=8/30.
+2026-08-22 17:24:42,556 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 17:24:42,556 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 17:24:42,670 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 17:24:42,670 - Model-rank0 - INFO - **** Epoch 34/100 ****
+2026-08-22 17:24:42,670 - Model-rank0 - INFO - Learning rate:0.000343
+2026-08-22 17:35:07,430 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 17:35:07,430 - Model-rank0 - INFO - Training mean loss: 0.346500
+2026-08-22 17:35:07,430 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.559039
+2026-08-22 17:35:07,430 - Model-rank0 - INFO - Training pixel precision: 0.804515
+2026-08-22 17:35:07,430 - Model-rank0 - INFO - Training pixel recall: 0.646915
+2026-08-22 17:35:07,430 - Model-rank0 - INFO - Training pixel F1: 0.717159
+2026-08-22 17:35:07,430 - Model-rank0 - INFO - Training loss component tversky: 0.218427
+2026-08-22 17:35:07,430 - Model-rank0 - INFO - Training loss component dice: 0.241181
+2026-08-22 17:35:07,430 - Model-rank0 - INFO - Training loss component hard_margin: 0.918952
+2026-08-22 17:35:07,430 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 17:35:07,430 - Model-rank0 - INFO - ---- EPOCH 034 EVALUATION ----
+2026-08-22 17:40:23,044 - Model-rank0 - INFO - Eval mean loss: 0.755405
+2026-08-22 17:40:23,044 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.337459
+2026-08-22 17:40:23,044 - Model-rank0 - INFO - Eval pixel precision: 0.779557
+2026-08-22 17:40:23,044 - Model-rank0 - INFO - Eval pixel recall: 0.373058
+2026-08-22 17:40:23,044 - Model-rank0 - INFO - Eval pixel F1: 0.504627
+2026-08-22 17:40:23,044 - Model-rank0 - INFO - Early stopping eval_f1=0.504627; best=0.518591 at epoch 25; bad_epochs=9/30.
+2026-08-22 17:40:23,076 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 17:40:23,076 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 17:40:23,260 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 17:40:23,260 - Model-rank0 - INFO - **** Epoch 35/100 ****
+2026-08-22 17:40:23,260 - Model-rank0 - INFO - Learning rate:0.000343
+2026-08-22 17:51:14,019 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 17:51:14,019 - Model-rank0 - INFO - Training mean loss: 0.338008
+2026-08-22 17:51:14,019 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.579150
+2026-08-22 17:51:14,020 - Model-rank0 - INFO - Training pixel precision: 0.818655
+2026-08-22 17:51:14,020 - Model-rank0 - INFO - Training pixel recall: 0.664385
+2026-08-22 17:51:14,020 - Model-rank0 - INFO - Training pixel F1: 0.733496
+2026-08-22 17:51:14,020 - Model-rank0 - INFO - Training loss component tversky: 0.212634
+2026-08-22 17:51:14,020 - Model-rank0 - INFO - Training loss component dice: 0.235347
+2026-08-22 17:51:14,020 - Model-rank0 - INFO - Training loss component hard_margin: 0.900714
+2026-08-22 17:51:14,020 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 17:51:14,020 - Model-rank0 - INFO - ---- EPOCH 035 EVALUATION ----
+2026-08-22 17:56:31,717 - Model-rank0 - INFO - Eval mean loss: 0.753044
+2026-08-22 17:56:31,717 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.342299
+2026-08-22 17:56:31,717 - Model-rank0 - INFO - Eval pixel precision: 0.789396
+2026-08-22 17:56:31,717 - Model-rank0 - INFO - Eval pixel recall: 0.376700
+2026-08-22 17:56:31,717 - Model-rank0 - INFO - Eval pixel F1: 0.510019
+2026-08-22 17:56:31,717 - Model-rank0 - INFO - Early stopping eval_f1=0.510019; best=0.518591 at epoch 25; bad_epochs=10/30.
+2026-08-22 17:56:31,746 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 17:56:31,767 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_35_model.pth
+2026-08-22 17:56:31,767 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 17:56:31,921 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 17:56:31,922 - Model-rank0 - INFO - **** Epoch 36/100 ****
+2026-08-22 17:56:31,922 - Model-rank0 - INFO - Learning rate:0.000343
+2026-08-22 18:06:18,137 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 18:06:18,137 - Model-rank0 - INFO - Training mean loss: 0.335996
+2026-08-22 18:06:18,137 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.571035
+2026-08-22 18:06:18,137 - Model-rank0 - INFO - Training pixel precision: 0.821410
+2026-08-22 18:06:18,137 - Model-rank0 - INFO - Training pixel recall: 0.651981
+2026-08-22 18:06:18,137 - Model-rank0 - INFO - Training pixel F1: 0.726954
+2026-08-22 18:06:18,137 - Model-rank0 - INFO - Training loss component tversky: 0.212510
+2026-08-22 18:06:18,137 - Model-rank0 - INFO - Training loss component dice: 0.234341
+2026-08-22 18:06:18,138 - Model-rank0 - INFO - Training loss component hard_margin: 0.883350
+2026-08-22 18:06:18,138 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 18:06:18,138 - Model-rank0 - INFO - ---- EPOCH 036 EVALUATION ----
+2026-08-22 18:11:34,267 - Model-rank0 - INFO - Eval mean loss: 0.751717
+2026-08-22 18:11:34,267 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.342251
+2026-08-22 18:11:34,267 - Model-rank0 - INFO - Eval pixel precision: 0.792633
+2026-08-22 18:11:34,267 - Model-rank0 - INFO - Eval pixel recall: 0.375909
+2026-08-22 18:11:34,267 - Model-rank0 - INFO - Eval pixel F1: 0.509965
+2026-08-22 18:11:34,267 - Model-rank0 - INFO - Early stopping eval_f1=0.509965; best=0.518591 at epoch 25; bad_epochs=11/30.
+2026-08-22 18:11:34,298 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 18:11:34,298 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 18:11:34,445 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 18:11:34,445 - Model-rank0 - INFO - **** Epoch 37/100 ****
+2026-08-22 18:11:34,445 - Model-rank0 - INFO - Learning rate:0.000343
+2026-08-22 18:21:18,979 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.453 GiB
+2026-08-22 18:21:18,979 - Model-rank0 - INFO - Training mean loss: 0.338858
+2026-08-22 18:21:18,979 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.581951
+2026-08-22 18:21:18,979 - Model-rank0 - INFO - Training pixel precision: 0.817006
+2026-08-22 18:21:18,979 - Model-rank0 - INFO - Training pixel recall: 0.669176
+2026-08-22 18:21:18,979 - Model-rank0 - INFO - Training pixel F1: 0.735739
+2026-08-22 18:21:18,979 - Model-rank0 - INFO - Training loss component tversky: 0.213168
+2026-08-22 18:21:18,979 - Model-rank0 - INFO - Training loss component dice: 0.235665
+2026-08-22 18:21:18,979 - Model-rank0 - INFO - Training loss component hard_margin: 0.903410
+2026-08-22 18:21:18,979 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 18:21:18,979 - Model-rank0 - INFO - ---- EPOCH 037 EVALUATION ----
+2026-08-22 18:26:44,401 - Model-rank0 - INFO - Eval mean loss: 0.740136
+2026-08-22 18:26:44,401 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.339028
+2026-08-22 18:26:44,401 - Model-rank0 - INFO - Eval pixel precision: 0.722772
+2026-08-22 18:26:44,401 - Model-rank0 - INFO - Eval pixel recall: 0.389704
+2026-08-22 18:26:44,401 - Model-rank0 - INFO - Eval pixel F1: 0.506379
+2026-08-22 18:26:44,401 - Model-rank0 - INFO - Early stopping eval_f1=0.506379; best=0.518591 at epoch 25; bad_epochs=12/30.
+2026-08-22 18:26:44,430 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 18:26:44,430 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 18:26:44,632 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 18:26:44,632 - Model-rank0 - INFO - **** Epoch 38/100 ****
+2026-08-22 18:26:44,632 - Model-rank0 - INFO - Learning rate:0.000343
+2026-08-22 18:36:25,723 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 18:36:25,724 - Model-rank0 - INFO - Training mean loss: 0.330500
+2026-08-22 18:36:25,724 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.585894
+2026-08-22 18:36:25,724 - Model-rank0 - INFO - Training pixel precision: 0.821336
+2026-08-22 18:36:25,724 - Model-rank0 - INFO - Training pixel recall: 0.671473
+2026-08-22 18:36:25,724 - Model-rank0 - INFO - Training pixel F1: 0.738882
+2026-08-22 18:36:25,724 - Model-rank0 - INFO - Training loss component tversky: 0.208574
+2026-08-22 18:36:25,724 - Model-rank0 - INFO - Training loss component dice: 0.230108
+2026-08-22 18:36:25,724 - Model-rank0 - INFO - Training loss component hard_margin: 0.874105
+2026-08-22 18:36:25,724 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 18:36:25,724 - Model-rank0 - INFO - ---- EPOCH 038 EVALUATION ----
+2026-08-22 18:41:48,014 - Model-rank0 - INFO - Eval mean loss: 0.752516
+2026-08-22 18:41:48,014 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.337880
+2026-08-22 18:41:48,014 - Model-rank0 - INFO - Eval pixel precision: 0.738020
+2026-08-22 18:41:48,014 - Model-rank0 - INFO - Eval pixel recall: 0.383928
+2026-08-22 18:41:48,014 - Model-rank0 - INFO - Eval pixel F1: 0.505097
+2026-08-22 18:41:48,014 - Model-rank0 - INFO - Early stopping eval_f1=0.505097; best=0.518591 at epoch 25; bad_epochs=13/30.
+2026-08-22 18:41:48,047 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 18:41:48,047 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 18:41:48,239 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 18:41:48,239 - Model-rank0 - INFO - **** Epoch 39/100 ****
+2026-08-22 18:41:48,239 - Model-rank0 - INFO - Learning rate:0.000343
+2026-08-22 18:51:10,529 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 18:51:10,529 - Model-rank0 - INFO - Training mean loss: 0.338908
+2026-08-22 18:51:10,530 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.580237
+2026-08-22 18:51:10,530 - Model-rank0 - INFO - Training pixel precision: 0.815927
+2026-08-22 18:51:10,530 - Model-rank0 - INFO - Training pixel recall: 0.667631
+2026-08-22 18:51:10,530 - Model-rank0 - INFO - Training pixel F1: 0.734367
+2026-08-22 18:51:10,530 - Model-rank0 - INFO - Training loss component tversky: 0.213748
+2026-08-22 18:51:10,530 - Model-rank0 - INFO - Training loss component dice: 0.236400
+2026-08-22 18:51:10,530 - Model-rank0 - INFO - Training loss component hard_margin: 0.897002
+2026-08-22 18:51:10,530 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 18:51:10,530 - Model-rank0 - INFO - ---- EPOCH 039 EVALUATION ----
+2026-08-22 18:56:29,391 - Model-rank0 - INFO - Eval mean loss: 0.742205
+2026-08-22 18:56:29,391 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.329445
+2026-08-22 18:56:29,391 - Model-rank0 - INFO - Eval pixel precision: 0.638771
+2026-08-22 18:56:29,391 - Model-rank0 - INFO - Eval pixel recall: 0.404874
+2026-08-22 18:56:29,391 - Model-rank0 - INFO - Eval pixel F1: 0.495612
+2026-08-22 18:56:29,391 - Model-rank0 - INFO - Early stopping eval_f1=0.495612; best=0.518591 at epoch 25; bad_epochs=14/30.
+2026-08-22 18:56:29,429 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 18:56:29,429 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 18:56:29,693 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 18:56:29,693 - Model-rank0 - INFO - **** Epoch 40/100 ****
+2026-08-22 18:56:29,693 - Model-rank0 - INFO - Learning rate:0.000343
+2026-08-22 19:05:40,735 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 19:05:40,735 - Model-rank0 - INFO - Training mean loss: 0.336637
+2026-08-22 19:05:40,735 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.568891
+2026-08-22 19:05:40,735 - Model-rank0 - INFO - Training pixel precision: 0.813407
+2026-08-22 19:05:40,735 - Model-rank0 - INFO - Training pixel recall: 0.654275
+2026-08-22 19:05:40,735 - Model-rank0 - INFO - Training pixel F1: 0.725214
+2026-08-22 19:05:40,735 - Model-rank0 - INFO - Training loss component tversky: 0.213546
+2026-08-22 19:05:40,735 - Model-rank0 - INFO - Training loss component dice: 0.235191
+2026-08-22 19:05:40,735 - Model-rank0 - INFO - Training loss component hard_margin: 0.878128
+2026-08-22 19:05:40,735 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 19:05:40,735 - Model-rank0 - INFO - ---- EPOCH 040 EVALUATION ----
+2026-08-22 19:11:21,324 - Model-rank0 - INFO - Eval mean loss: 0.742843
+2026-08-22 19:11:21,324 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.344358
+2026-08-22 19:11:21,324 - Model-rank0 - INFO - Eval pixel precision: 0.726308
+2026-08-22 19:11:21,324 - Model-rank0 - INFO - Eval pixel recall: 0.395706
+2026-08-22 19:11:21,324 - Model-rank0 - INFO - Eval pixel F1: 0.512301
+2026-08-22 19:11:21,324 - Model-rank0 - INFO - Early stopping eval_f1=0.512301; best=0.518591 at epoch 25; bad_epochs=15/30.
+2026-08-22 19:11:21,366 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 19:11:21,391 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_40_model.pth
+2026-08-22 19:11:21,391 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 19:11:21,668 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 19:11:21,669 - Model-rank0 - INFO - **** Epoch 41/100 ****
+2026-08-22 19:11:21,669 - Model-rank0 - INFO - Learning rate:0.000240
+2026-08-22 19:20:49,822 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 19:20:49,822 - Model-rank0 - INFO - Training mean loss: 0.326505
+2026-08-22 19:20:49,822 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.597143
+2026-08-22 19:20:49,823 - Model-rank0 - INFO - Training pixel precision: 0.819769
+2026-08-22 19:20:49,823 - Model-rank0 - INFO - Training pixel recall: 0.687387
+2026-08-22 19:20:49,823 - Model-rank0 - INFO - Training pixel F1: 0.747764
+2026-08-22 19:20:49,823 - Model-rank0 - INFO - Training loss component tversky: 0.207010
+2026-08-22 19:20:49,823 - Model-rank0 - INFO - Training loss component dice: 0.228212
+2026-08-22 19:20:49,823 - Model-rank0 - INFO - Training loss component hard_margin: 0.852625
+2026-08-22 19:20:49,823 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 19:20:49,823 - Model-rank0 - INFO - ---- EPOCH 041 EVALUATION ----
+2026-08-22 19:26:18,612 - Model-rank0 - INFO - Eval mean loss: 0.741682
+2026-08-22 19:26:18,612 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.335755
+2026-08-22 19:26:18,612 - Model-rank0 - INFO - Eval pixel precision: 0.686267
+2026-08-22 19:26:18,613 - Model-rank0 - INFO - Eval pixel recall: 0.396636
+2026-08-22 19:26:18,613 - Model-rank0 - INFO - Eval pixel F1: 0.502719
+2026-08-22 19:26:18,613 - Model-rank0 - INFO - Early stopping eval_f1=0.502719; best=0.518591 at epoch 25; bad_epochs=16/30.
+2026-08-22 19:26:18,657 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 19:26:18,658 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 19:26:18,922 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 19:26:18,922 - Model-rank0 - INFO - **** Epoch 42/100 ****
+2026-08-22 19:26:18,922 - Model-rank0 - INFO - Learning rate:0.000240
+2026-08-22 19:35:54,629 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 19:35:54,630 - Model-rank0 - INFO - Training mean loss: 0.325574
+2026-08-22 19:35:54,630 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.599258
+2026-08-22 19:35:54,630 - Model-rank0 - INFO - Training pixel precision: 0.825102
+2026-08-22 19:35:54,630 - Model-rank0 - INFO - Training pixel recall: 0.686455
+2026-08-22 19:35:54,630 - Model-rank0 - INFO - Training pixel F1: 0.749420
+2026-08-22 19:35:54,630 - Model-rank0 - INFO - Training loss component tversky: 0.205673
+2026-08-22 19:35:54,630 - Model-rank0 - INFO - Training loss component dice: 0.227207
+2026-08-22 19:35:54,630 - Model-rank0 - INFO - Training loss component hard_margin: 0.858204
+2026-08-22 19:35:54,630 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 19:35:54,630 - Model-rank0 - INFO - ---- EPOCH 042 EVALUATION ----
+2026-08-22 19:41:24,285 - Model-rank0 - INFO - Eval mean loss: 0.756838
+2026-08-22 19:41:24,285 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.314511
+2026-08-22 19:41:24,285 - Model-rank0 - INFO - Eval pixel precision: 0.700320
+2026-08-22 19:41:24,285 - Model-rank0 - INFO - Eval pixel recall: 0.363422
+2026-08-22 19:41:24,285 - Model-rank0 - INFO - Eval pixel F1: 0.478521
+2026-08-22 19:41:24,286 - Model-rank0 - INFO - Early stopping eval_f1=0.478521; best=0.518591 at epoch 25; bad_epochs=17/30.
+2026-08-22 19:41:24,330 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 19:41:24,330 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 19:41:24,584 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 19:41:24,585 - Model-rank0 - INFO - **** Epoch 43/100 ****
+2026-08-22 19:41:24,585 - Model-rank0 - INFO - Learning rate:0.000240
+2026-08-22 19:50:47,245 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 19:50:47,245 - Model-rank0 - INFO - Training mean loss: 0.325413
+2026-08-22 19:50:47,246 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.585315
+2026-08-22 19:50:47,246 - Model-rank0 - INFO - Training pixel precision: 0.825787
+2026-08-22 19:50:47,246 - Model-rank0 - INFO - Training pixel recall: 0.667772
+2026-08-22 19:50:47,246 - Model-rank0 - INFO - Training pixel F1: 0.738421
+2026-08-22 19:50:47,246 - Model-rank0 - INFO - Training loss component tversky: 0.205496
+2026-08-22 19:50:47,246 - Model-rank0 - INFO - Training loss component dice: 0.226995
+2026-08-22 19:50:47,246 - Model-rank0 - INFO - Training loss component hard_margin: 0.858673
+2026-08-22 19:50:47,246 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 19:50:47,246 - Model-rank0 - INFO - ---- EPOCH 043 EVALUATION ----
+2026-08-22 19:56:02,357 - Model-rank0 - INFO - Eval mean loss: 0.755619
+2026-08-22 19:56:02,357 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.324480
+2026-08-22 19:56:02,357 - Model-rank0 - INFO - Eval pixel precision: 0.757015
+2026-08-22 19:56:02,357 - Model-rank0 - INFO - Eval pixel recall: 0.362204
+2026-08-22 19:56:02,357 - Model-rank0 - INFO - Eval pixel F1: 0.489973
+2026-08-22 19:56:02,357 - Model-rank0 - INFO - Early stopping eval_f1=0.489973; best=0.518591 at epoch 25; bad_epochs=18/30.
+2026-08-22 19:56:02,406 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 19:56:02,407 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 19:56:02,679 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 19:56:02,679 - Model-rank0 - INFO - **** Epoch 44/100 ****
+2026-08-22 19:56:02,679 - Model-rank0 - INFO - Learning rate:0.000240
+2026-08-22 20:05:40,504 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 20:05:40,504 - Model-rank0 - INFO - Training mean loss: 0.325933
+2026-08-22 20:05:40,504 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.587557
+2026-08-22 20:05:40,505 - Model-rank0 - INFO - Training pixel precision: 0.827787
+2026-08-22 20:05:40,505 - Model-rank0 - INFO - Training pixel recall: 0.669379
+2026-08-22 20:05:40,505 - Model-rank0 - INFO - Training pixel F1: 0.740203
+2026-08-22 20:05:40,505 - Model-rank0 - INFO - Training loss component tversky: 0.206088
+2026-08-22 20:05:40,505 - Model-rank0 - INFO - Training loss component dice: 0.227453
+2026-08-22 20:05:40,505 - Model-rank0 - INFO - Training loss component hard_margin: 0.857272
+2026-08-22 20:05:40,505 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 20:05:40,505 - Model-rank0 - INFO - ---- EPOCH 044 EVALUATION ----
+2026-08-22 20:10:58,297 - Model-rank0 - INFO - Eval mean loss: 0.757839
+2026-08-22 20:10:58,298 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.339156
+2026-08-22 20:10:58,298 - Model-rank0 - INFO - Eval pixel precision: 0.782103
+2026-08-22 20:10:58,298 - Model-rank0 - INFO - Eval pixel recall: 0.374546
+2026-08-22 20:10:58,298 - Model-rank0 - INFO - Eval pixel F1: 0.506521
+2026-08-22 20:10:58,298 - Model-rank0 - INFO - Early stopping eval_f1=0.506521; best=0.518591 at epoch 25; bad_epochs=19/30.
+2026-08-22 20:10:58,338 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 20:10:58,339 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 20:10:58,573 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 20:10:58,574 - Model-rank0 - INFO - **** Epoch 45/100 ****
+2026-08-22 20:10:58,574 - Model-rank0 - INFO - Learning rate:0.000240
+2026-08-22 20:20:57,342 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 20:20:57,342 - Model-rank0 - INFO - Training mean loss: 0.317006
+2026-08-22 20:20:57,342 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.605982
+2026-08-22 20:20:57,342 - Model-rank0 - INFO - Training pixel precision: 0.827835
+2026-08-22 20:20:57,342 - Model-rank0 - INFO - Training pixel recall: 0.693363
+2026-08-22 20:20:57,342 - Model-rank0 - INFO - Training pixel F1: 0.754656
+2026-08-22 20:20:57,342 - Model-rank0 - INFO - Training loss component tversky: 0.200939
+2026-08-22 20:20:57,342 - Model-rank0 - INFO - Training loss component dice: 0.221815
+2026-08-22 20:20:57,342 - Model-rank0 - INFO - Training loss component hard_margin: 0.827952
+2026-08-22 20:20:57,342 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 20:20:57,342 - Model-rank0 - INFO - ---- EPOCH 045 EVALUATION ----
+2026-08-22 20:26:15,546 - Model-rank0 - INFO - Eval mean loss: 0.756541
+2026-08-22 20:26:15,547 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.340494
+2026-08-22 20:26:15,547 - Model-rank0 - INFO - Eval pixel precision: 0.769630
+2026-08-22 20:26:15,547 - Model-rank0 - INFO - Eval pixel recall: 0.379135
+2026-08-22 20:26:15,547 - Model-rank0 - INFO - Eval pixel F1: 0.508013
+2026-08-22 20:26:15,547 - Model-rank0 - INFO - Early stopping eval_f1=0.508013; best=0.518591 at epoch 25; bad_epochs=20/30.
+2026-08-22 20:26:15,583 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 20:26:15,606 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_45_model.pth
+2026-08-22 20:26:15,606 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 20:26:15,893 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 20:26:15,894 - Model-rank0 - INFO - **** Epoch 46/100 ****
+2026-08-22 20:26:15,894 - Model-rank0 - INFO - Learning rate:0.000240
+2026-08-22 20:36:22,396 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 20:36:22,396 - Model-rank0 - INFO - Training mean loss: 0.318940
+2026-08-22 20:36:22,396 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.596152
+2026-08-22 20:36:22,396 - Model-rank0 - INFO - Training pixel precision: 0.818603
+2026-08-22 20:36:22,396 - Model-rank0 - INFO - Training pixel recall: 0.686893
+2026-08-22 20:36:22,396 - Model-rank0 - INFO - Training pixel F1: 0.746986
+2026-08-22 20:36:22,396 - Model-rank0 - INFO - Training loss component tversky: 0.202439
+2026-08-22 20:36:22,396 - Model-rank0 - INFO - Training loss component dice: 0.223039
+2026-08-22 20:36:22,396 - Model-rank0 - INFO - Training loss component hard_margin: 0.830450
+2026-08-22 20:36:22,396 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 20:36:22,396 - Model-rank0 - INFO - ---- EPOCH 046 EVALUATION ----
+2026-08-22 20:41:32,333 - Model-rank0 - INFO - Eval mean loss: 0.757236
+2026-08-22 20:41:32,333 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.334563
+2026-08-22 20:41:32,333 - Model-rank0 - INFO - Eval pixel precision: 0.817135
+2026-08-22 20:41:32,334 - Model-rank0 - INFO - Eval pixel recall: 0.361640
+2026-08-22 20:41:32,334 - Model-rank0 - INFO - Eval pixel F1: 0.501383
+2026-08-22 20:41:32,334 - Model-rank0 - INFO - Early stopping eval_f1=0.501383; best=0.518591 at epoch 25; bad_epochs=21/30.
+2026-08-22 20:41:32,364 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 20:41:32,365 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 20:41:32,646 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 20:41:32,646 - Model-rank0 - INFO - **** Epoch 47/100 ****
+2026-08-22 20:41:32,646 - Model-rank0 - INFO - Learning rate:0.000240
+2026-08-22 20:51:50,182 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 20:51:50,182 - Model-rank0 - INFO - Training mean loss: 0.320072
+2026-08-22 20:51:50,182 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.601875
+2026-08-22 20:51:50,182 - Model-rank0 - INFO - Training pixel precision: 0.828944
+2026-08-22 20:51:50,182 - Model-rank0 - INFO - Training pixel recall: 0.687228
+2026-08-22 20:51:50,182 - Model-rank0 - INFO - Training pixel F1: 0.751463
+2026-08-22 20:51:50,182 - Model-rank0 - INFO - Training loss component tversky: 0.202690
+2026-08-22 20:51:50,182 - Model-rank0 - INFO - Training loss component dice: 0.223693
+2026-08-22 20:51:50,183 - Model-rank0 - INFO - Training loss component hard_margin: 0.838290
+2026-08-22 20:51:50,183 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 20:51:50,183 - Model-rank0 - INFO - ---- EPOCH 047 EVALUATION ----
+2026-08-22 20:56:57,719 - Model-rank0 - INFO - Eval mean loss: 0.747150
+2026-08-22 20:56:57,720 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.342152
+2026-08-22 20:56:57,720 - Model-rank0 - INFO - Eval pixel precision: 0.764672
+2026-08-22 20:56:57,720 - Model-rank0 - INFO - Eval pixel recall: 0.382420
+2026-08-22 20:56:57,720 - Model-rank0 - INFO - Eval pixel F1: 0.509856
+2026-08-22 20:56:57,720 - Model-rank0 - INFO - Early stopping eval_f1=0.509856; best=0.518591 at epoch 25; bad_epochs=22/30.
+2026-08-22 20:56:57,754 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 20:56:57,755 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 20:56:58,066 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 20:56:58,067 - Model-rank0 - INFO - **** Epoch 48/100 ****
+2026-08-22 20:56:58,067 - Model-rank0 - INFO - Learning rate:0.000240
+2026-08-22 21:07:24,974 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 21:07:24,974 - Model-rank0 - INFO - Training mean loss: 0.326316
+2026-08-22 21:07:24,974 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.582015
+2026-08-22 21:07:24,974 - Model-rank0 - INFO - Training pixel precision: 0.822007
+2026-08-22 21:07:24,974 - Model-rank0 - INFO - Training pixel recall: 0.665941
+2026-08-22 21:07:24,974 - Model-rank0 - INFO - Training pixel F1: 0.735790
+2026-08-22 21:07:24,974 - Model-rank0 - INFO - Training loss component tversky: 0.206112
+2026-08-22 21:07:24,974 - Model-rank0 - INFO - Training loss component dice: 0.227700
+2026-08-22 21:07:24,974 - Model-rank0 - INFO - Training loss component hard_margin: 0.860487
+2026-08-22 21:07:24,974 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 21:07:24,974 - Model-rank0 - INFO - ---- EPOCH 048 EVALUATION ----
+2026-08-22 21:12:37,413 - Model-rank0 - INFO - Eval mean loss: 0.744760
+2026-08-22 21:12:37,414 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.339959
+2026-08-22 21:12:37,414 - Model-rank0 - INFO - Eval pixel precision: 0.757325
+2026-08-22 21:12:37,414 - Model-rank0 - INFO - Eval pixel recall: 0.381519
+2026-08-22 21:12:37,414 - Model-rank0 - INFO - Eval pixel F1: 0.507417
+2026-08-22 21:12:37,414 - Model-rank0 - INFO - Early stopping eval_f1=0.507417; best=0.518591 at epoch 25; bad_epochs=23/30.
+2026-08-22 21:12:37,446 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 21:12:37,446 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 21:12:37,664 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 21:12:37,665 - Model-rank0 - INFO - **** Epoch 49/100 ****
+2026-08-22 21:12:37,665 - Model-rank0 - INFO - Learning rate:0.000240
+2026-08-22 21:23:30,525 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 21:23:30,525 - Model-rank0 - INFO - Training mean loss: 0.319643
+2026-08-22 21:23:30,525 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.604557
+2026-08-22 21:23:30,525 - Model-rank0 - INFO - Training pixel precision: 0.825810
+2026-08-22 21:23:30,525 - Model-rank0 - INFO - Training pixel recall: 0.692919
+2026-08-22 21:23:30,525 - Model-rank0 - INFO - Training pixel F1: 0.753550
+2026-08-22 21:23:30,525 - Model-rank0 - INFO - Training loss component tversky: 0.203485
+2026-08-22 21:23:30,525 - Model-rank0 - INFO - Training loss component dice: 0.224288
+2026-08-22 21:23:30,525 - Model-rank0 - INFO - Training loss component hard_margin: 0.825154
+2026-08-22 21:23:30,525 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 21:23:30,526 - Model-rank0 - INFO - ---- EPOCH 049 EVALUATION ----
+2026-08-22 21:28:38,521 - Model-rank0 - INFO - Eval mean loss: 0.748090
+2026-08-22 21:28:38,521 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.341119
+2026-08-22 21:28:38,521 - Model-rank0 - INFO - Eval pixel precision: 0.801779
+2026-08-22 21:28:38,521 - Model-rank0 - INFO - Eval pixel recall: 0.372536
+2026-08-22 21:28:38,521 - Model-rank0 - INFO - Eval pixel F1: 0.508708
+2026-08-22 21:28:38,522 - Model-rank0 - INFO - Early stopping eval_f1=0.508708; best=0.518591 at epoch 25; bad_epochs=24/30.
+2026-08-22 21:28:38,555 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 21:28:38,556 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 21:28:38,795 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 21:28:38,796 - Model-rank0 - INFO - **** Epoch 50/100 ****
+2026-08-22 21:28:38,796 - Model-rank0 - INFO - Learning rate:0.000240
+2026-08-22 21:39:50,740 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 21:39:50,740 - Model-rank0 - INFO - Training mean loss: 0.319514
+2026-08-22 21:39:50,740 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.599646
+2026-08-22 21:39:50,740 - Model-rank0 - INFO - Training pixel precision: 0.824838
+2026-08-22 21:39:50,740 - Model-rank0 - INFO - Training pixel recall: 0.687148
+2026-08-22 21:39:50,740 - Model-rank0 - INFO - Training pixel F1: 0.749723
+2026-08-22 21:39:50,740 - Model-rank0 - INFO - Training loss component tversky: 0.203425
+2026-08-22 21:39:50,740 - Model-rank0 - INFO - Training loss component dice: 0.223754
+2026-08-22 21:39:50,740 - Model-rank0 - INFO - Training loss component hard_margin: 0.825260
+2026-08-22 21:39:50,740 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 21:39:50,741 - Model-rank0 - INFO - ---- EPOCH 050 EVALUATION ----
+2026-08-22 21:44:58,881 - Model-rank0 - INFO - Eval mean loss: 0.755245
+2026-08-22 21:44:58,882 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.328585
+2026-08-22 21:44:58,882 - Model-rank0 - INFO - Eval pixel precision: 0.766613
+2026-08-22 21:44:58,882 - Model-rank0 - INFO - Eval pixel recall: 0.365109
+2026-08-22 21:44:58,882 - Model-rank0 - INFO - Eval pixel F1: 0.494640
+2026-08-22 21:44:58,882 - Model-rank0 - INFO - Early stopping eval_f1=0.494640; best=0.518591 at epoch 25; bad_epochs=25/30.
+2026-08-22 21:44:58,916 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 21:44:58,941 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_50_model.pth
+2026-08-22 21:44:58,941 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 21:44:59,139 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 21:44:59,140 - Model-rank0 - INFO - **** Epoch 51/100 ****
+2026-08-22 21:44:59,140 - Model-rank0 - INFO - Learning rate:0.000168
+2026-08-22 21:56:08,949 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 21:56:08,949 - Model-rank0 - INFO - Training mean loss: 0.310135
+2026-08-22 21:56:08,949 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.610128
+2026-08-22 21:56:08,950 - Model-rank0 - INFO - Training pixel precision: 0.827671
+2026-08-22 21:56:08,950 - Model-rank0 - INFO - Training pixel recall: 0.698915
+2026-08-22 21:56:08,950 - Model-rank0 - INFO - Training pixel F1: 0.757863
+2026-08-22 21:56:08,950 - Model-rank0 - INFO - Training loss component tversky: 0.198138
+2026-08-22 21:56:08,950 - Model-rank0 - INFO - Training loss component dice: 0.218306
+2026-08-22 21:56:08,950 - Model-rank0 - INFO - Training loss component hard_margin: 0.792514
+2026-08-22 21:56:08,950 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 21:56:08,950 - Model-rank0 - INFO - ---- EPOCH 051 EVALUATION ----
+2026-08-22 22:01:16,131 - Model-rank0 - INFO - Eval mean loss: 0.737071
+2026-08-22 22:01:16,131 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.343698
+2026-08-22 22:01:16,131 - Model-rank0 - INFO - Eval pixel precision: 0.781168
+2026-08-22 22:01:16,131 - Model-rank0 - INFO - Eval pixel recall: 0.380316
+2026-08-22 22:01:16,131 - Model-rank0 - INFO - Eval pixel F1: 0.511571
+2026-08-22 22:01:16,131 - Model-rank0 - INFO - Early stopping eval_f1=0.511571; best=0.518591 at epoch 25; bad_epochs=26/30.
+2026-08-22 22:01:16,176 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 22:01:16,176 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 22:01:16,401 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 22:01:16,402 - Model-rank0 - INFO - **** Epoch 52/100 ****
+2026-08-22 22:01:16,402 - Model-rank0 - INFO - Learning rate:0.000168
+2026-08-22 22:12:01,412 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 22:12:01,412 - Model-rank0 - INFO - Training mean loss: 0.314131
+2026-08-22 22:12:01,412 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.621471
+2026-08-22 22:12:01,412 - Model-rank0 - INFO - Training pixel precision: 0.827239
+2026-08-22 22:12:01,412 - Model-rank0 - INFO - Training pixel recall: 0.714162
+2026-08-22 22:12:01,412 - Model-rank0 - INFO - Training pixel F1: 0.766552
+2026-08-22 22:12:01,412 - Model-rank0 - INFO - Training loss component tversky: 0.199159
+2026-08-22 22:12:01,412 - Model-rank0 - INFO - Training loss component dice: 0.219898
+2026-08-22 22:12:01,412 - Model-rank0 - INFO - Training loss component hard_margin: 0.819870
+2026-08-22 22:12:01,412 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 22:12:01,412 - Model-rank0 - INFO - ---- EPOCH 052 EVALUATION ----
+2026-08-22 22:17:04,562 - Model-rank0 - INFO - Eval mean loss: 0.744728
+2026-08-22 22:17:04,563 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.347151
+2026-08-22 22:17:04,563 - Model-rank0 - INFO - Eval pixel precision: 0.809590
+2026-08-22 22:17:04,563 - Model-rank0 - INFO - Eval pixel recall: 0.378016
+2026-08-22 22:17:04,563 - Model-rank0 - INFO - Eval pixel F1: 0.515386
+2026-08-22 22:17:04,563 - Model-rank0 - INFO - Early stopping eval_f1=0.515386; best=0.518591 at epoch 25; bad_epochs=27/30.
+2026-08-22 22:17:04,596 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 22:17:04,597 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 22:17:04,726 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 22:17:04,726 - Model-rank0 - INFO - **** Epoch 53/100 ****
+2026-08-22 22:17:04,726 - Model-rank0 - INFO - Learning rate:0.000168
+2026-08-22 22:28:13,094 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 22:28:13,094 - Model-rank0 - INFO - Training mean loss: 0.315740
+2026-08-22 22:28:13,094 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.608371
+2026-08-22 22:28:13,094 - Model-rank0 - INFO - Training pixel precision: 0.835174
+2026-08-22 22:28:13,094 - Model-rank0 - INFO - Training pixel recall: 0.691382
+2026-08-22 22:28:13,094 - Model-rank0 - INFO - Training pixel F1: 0.756506
+2026-08-22 22:28:13,094 - Model-rank0 - INFO - Training loss component tversky: 0.200004
+2026-08-22 22:28:13,094 - Model-rank0 - INFO - Training loss component dice: 0.220440
+2026-08-22 22:28:13,094 - Model-rank0 - INFO - Training loss component hard_margin: 0.826699
+2026-08-22 22:28:13,094 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 22:28:13,094 - Model-rank0 - INFO - ---- EPOCH 053 EVALUATION ----
+2026-08-22 22:33:15,725 - Model-rank0 - INFO - Eval mean loss: 0.735098
+2026-08-22 22:33:15,725 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.348852
+2026-08-22 22:33:15,725 - Model-rank0 - INFO - Eval pixel precision: 0.804330
+2026-08-22 22:33:15,725 - Model-rank0 - INFO - Eval pixel recall: 0.381203
+2026-08-22 22:33:15,725 - Model-rank0 - INFO - Eval pixel F1: 0.517258
+2026-08-22 22:33:15,725 - Model-rank0 - INFO - Early stopping eval_f1=0.517258; best=0.518591 at epoch 25; bad_epochs=28/30.
+2026-08-22 22:33:15,756 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 22:33:15,757 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 22:33:16,009 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 22:33:16,010 - Model-rank0 - INFO - **** Epoch 54/100 ****
+2026-08-22 22:33:16,010 - Model-rank0 - INFO - Learning rate:0.000168
+2026-08-22 22:44:29,348 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.449 GiB
+2026-08-22 22:44:29,349 - Model-rank0 - INFO - Training mean loss: 0.315427
+2026-08-22 22:44:29,349 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.598453
+2026-08-22 22:44:29,349 - Model-rank0 - INFO - Training pixel precision: 0.830893
+2026-08-22 22:44:29,349 - Model-rank0 - INFO - Training pixel recall: 0.681454
+2026-08-22 22:44:29,349 - Model-rank0 - INFO - Training pixel F1: 0.748790
+2026-08-22 22:44:29,349 - Model-rank0 - INFO - Training loss component tversky: 0.198299
+2026-08-22 22:44:29,349 - Model-rank0 - INFO - Training loss component dice: 0.219481
+2026-08-22 22:44:29,349 - Model-rank0 - INFO - Training loss component hard_margin: 0.842050
+2026-08-22 22:44:29,349 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 22:44:29,349 - Model-rank0 - INFO - ---- EPOCH 054 EVALUATION ----
+2026-08-22 22:49:30,329 - Model-rank0 - INFO - Eval mean loss: 0.754192
+2026-08-22 22:49:30,329 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.329035
+2026-08-22 22:49:30,329 - Model-rank0 - INFO - Eval pixel precision: 0.748565
+2026-08-22 22:49:30,329 - Model-rank0 - INFO - Eval pixel recall: 0.369918
+2026-08-22 22:49:30,329 - Model-rank0 - INFO - Eval pixel F1: 0.495149
+2026-08-22 22:49:30,329 - Model-rank0 - INFO - Early stopping eval_f1=0.495149; best=0.518591 at epoch 25; bad_epochs=29/30.
+2026-08-22 22:49:30,356 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 22:49:30,356 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 22:49:30,816 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 22:49:30,817 - Model-rank0 - INFO - **** Epoch 55/100 ****
+2026-08-22 22:49:30,817 - Model-rank0 - INFO - Learning rate:0.000168
+2026-08-22 22:59:54,991 - Model-rank0 - INFO - CUDA memory after training cleanup: allocated=0.017 GiB, reserved=0.451 GiB
+2026-08-22 22:59:54,992 - Model-rank0 - INFO - Training mean loss: 0.307625
+2026-08-22 22:59:54,992 - Model-rank0 - INFO - Training accuracy (IoU) of prediction: 0.610120
+2026-08-22 22:59:54,992 - Model-rank0 - INFO - Training pixel precision: 0.834494
+2026-08-22 22:59:54,992 - Model-rank0 - INFO - Training pixel recall: 0.694112
+2026-08-22 22:59:54,992 - Model-rank0 - INFO - Training pixel F1: 0.757857
+2026-08-22 22:59:54,992 - Model-rank0 - INFO - Training loss component tversky: 0.194906
+2026-08-22 22:59:54,992 - Model-rank0 - INFO - Training loss component dice: 0.215064
+2026-08-22 22:59:54,992 - Model-rank0 - INFO - Training loss component hard_margin: 0.804596
+2026-08-22 22:59:54,992 - Model-rank0 - INFO - Training loss component hard_weight: 0.100000
+2026-08-22 22:59:54,992 - Model-rank0 - INFO - ---- EPOCH 055 EVALUATION ----
+2026-08-22 23:05:08,119 - Model-rank0 - INFO - Eval mean loss: 0.748047
+2026-08-22 23:05:08,119 - Model-rank0 - INFO - Eval avg class IoU of prediction: 0.344615
+2026-08-22 23:05:08,119 - Model-rank0 - INFO - Eval pixel precision: 0.788925
+2026-08-22 23:05:08,119 - Model-rank0 - INFO - Eval pixel recall: 0.379616
+2026-08-22 23:05:08,119 - Model-rank0 - INFO - Eval pixel F1: 0.512585
+2026-08-22 23:05:08,119 - Model-rank0 - INFO - Early stopping eval_f1=0.512585; best=0.518591 at epoch 25; bad_epochs=30/30.
+2026-08-22 23:05:08,149 - Model-rank0 - INFO - Saved recoverable checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/latest_model.pth
+2026-08-22 23:05:08,170 - Model-rank0 - INFO - Saved epoch checkpoint at /home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_multiscale_contrast_pretrained_seed47_E100/checkpoints/epoch_55_model.pth
+2026-08-22 23:05:08,170 - Model-rank0 - INFO - Best mIoU_mid: 0.350066
+2026-08-22 23:05:08,170 - Model-rank0 - INFO - EARLY STOP triggered at epoch 55: eval_f1 did not improve by at least 0.00010000 for 30 counted evaluations. Best value 0.518591 was observed at epoch 25.
+2026-08-22 23:05:08,379 - Model-rank0 - INFO - CUDA memory after evaluation cleanup: allocated=0.017 GiB, reserved=0.447 GiB
+2026-08-22 23:05:08,695 - Model-rank0 - INFO - CUDA memory after training shutdown: allocated=0.016 GiB, reserved=0.443 GiB

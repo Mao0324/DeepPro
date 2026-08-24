@@ -1,0 +1,13 @@
+{
+  "selected_sweep": "/home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_motion_detrend_multiscale_contrast_scratch_seed47_E100/postprocess/results/epoch_39_centroid_f1.json",
+  "prediction_root": "/home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_motion_detrend_multiscale_contrast_scratch_seed47_E100/postprocess/probabilities/epoch_39",
+  "threshold": 0.14,
+  "min_area": 2,
+  "proxy_precision": 0.9315046415678184,
+  "proxy_recall": 0.6569148936170213,
+  "proxy_f1": 0.7704756318652022,
+  "proxy_true_positive": 57798,
+  "proxy_false_positive": 4250,
+  "proxy_false_negative": 30186,
+  "centroid_dir": "/home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_motion_detrend_multiscale_contrast_scratch_seed47_E100/submission/centroid_best_proxy_f1"
+}

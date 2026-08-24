@@ -14,6 +14,19 @@ import os
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
+# Keep NumPy/SciPy kernels single-threaded inside each process-pool worker.
+# OpenCV has its own explicit limit below. Without these limits, four model
+# sweeps x four workers can each create dozens of native threads and spend
+# more time scheduling than evaluating centroids.
+_NUMERIC_THREADS = os.environ.get('CENTROID_F1_NUMERIC_THREADS', '1')
+for _thread_variable in (
+    'OMP_NUM_THREADS',
+    'OPENBLAS_NUM_THREADS',
+    'MKL_NUM_THREADS',
+    'NUMEXPR_NUM_THREADS',
+):
+    os.environ[_thread_variable] = _NUMERIC_THREADS
+
 import cv2
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -218,6 +231,12 @@ def main():
     parser.add_argument('--min-areas', default='1,2')
     parser.add_argument('--match-distance', type=float, default=2.0)
     parser.add_argument('--workers', type=int, default=min(8, os.cpu_count() or 1))
+    parser.add_argument(
+        '--opencv-threads',
+        type=int,
+        default=int(os.environ.get('CENTROID_F1_OPENCV_THREADS', '4')),
+        help='native OpenCV threads per process-pool worker (default: 4)',
+    )
     parser.add_argument('--output-csv', type=Path)
     parser.add_argument('--output-json', type=Path)
     args = parser.parse_args()
@@ -232,6 +251,16 @@ def main():
         parser.error('--match-distance must be non-negative')
     if args.workers < 1:
         parser.error('--workers must be positive')
+    if args.opencv_threads < 1:
+        parser.error('--opencv-threads must be positive')
+
+    cv2.setNumThreads(args.opencv_threads)
+    print(
+        'Parallelism: workers=%d opencv_threads_per_worker=%d '
+        'numeric_threads_per_worker=%s'
+        % (args.workers, cv2.getNumThreads(), _NUMERIC_THREADS),
+        flush=True,
+    )
 
     try:
         thresholds = parse_float_grid(args.thresholds)
