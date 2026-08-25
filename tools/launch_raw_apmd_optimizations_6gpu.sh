@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO_ROOT="/home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/project_runtime_env.sh"
 RUNNER="$REPO_ROOT/tools/run_structure_candidate_experiment.sh"
 DRY_RUN=0
 if [[ $# -gt 1 ]]; then
@@ -45,6 +45,7 @@ fi
 
 for configuration in "${CONFIGURATIONS[@]}"; do
     IFS='|' read -r gpu seed variant tag slug <<<"$configuration"
+    csig_require_allowed_gpu "$gpu"
     session="csig_opt_g${gpu}_${tag}_s${seed}_${BATCH_STAMP}"
     experiment="$DAY_ROOT/SatVideoIRSDT_v1__${BATCH_STAMP}__F1OHEM-${slug}_E100"
     screen_log="$SCREEN_LOG_ROOT/${session}.log"

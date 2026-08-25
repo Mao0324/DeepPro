@@ -77,6 +77,9 @@ def parse_args():
 
 
 def main(args):
+    raise RuntimeError(
+        'This branch-pretraining entry point is retired by the scratch-only policy.'
+    )
     visible_devices = parse_visible_devices(args.gpu)
     if len(visible_devices) != 1:
         raise ValueError('Branch pretraining requires exactly one GPU.')

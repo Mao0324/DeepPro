@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO_ROOT="/home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main"
-PYTHON_BIN="/home/devbox/project/model/miniconda3/envs/sjyPID/bin/python"
-DATA_ROOT="/home/devbox/project/model/sjy/CSIG2026/datasets/SatVideoIRSDT_v1"
-BASE_CHECKPOINT="$REPO_ROOT/pretrained/SatVideoIRSDT_DeepPro-Plus_pretrained_init.pth"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/project_runtime_env.sh"
 MODEL="DeepPro-Plus_BRTD3"
 STRUCTURE_ADAPTER_LR="${STRUCTURE_ADAPTER_LR:-0.001}"
 STRUCTURE_BASE_LR_MULT="${STRUCTURE_BASE_LR_MULT:-0.1}"
 STRUCTURE_SEED="${STRUCTURE_SEED:-46}"
+STRUCTURE_BATCH_SIZE="${STRUCTURE_BATCH_SIZE:-10}"
+STRUCTURE_GRAD_ACCUM_STEPS="${STRUCTURE_GRAD_ACCUM_STEPS:-2}"
+STRUCTURE_EVAL_INTERVAL="${STRUCTURE_EVAL_INTERVAL:-1}"
+STRUCTURE_RESUME_MODE="${STRUCTURE_RESUME_MODE:-never}"
+STRUCTURE_RESUME_CHECKPOINT="${STRUCTURE_RESUME_CHECKPOINT:-}"
 THRESHOLD_GRID="${THRESHOLD_GRID:-0.15:0.70:0.01}"
-STRUCTURE_INIT_MODE="${STRUCTURE_INIT_MODE:-pretrained}"
+STRUCTURE_INIT_MODE="${STRUCTURE_INIT_MODE:-scratch}"
 STRUCTURE_USE_SWANLAB="${STRUCTURE_USE_SWANLAB:-0}"
 STRUCTURE_SWANLAB_MODE="${STRUCTURE_SWANLAB_MODE:-offline}"
-SWANLAB_CREDENTIAL_FILE="${SWANLAB_CREDENTIAL_FILE:-/home/devbox/project/model/.swanlab/.netrc}"
-if [[ "$STRUCTURE_USE_SWANLAB" == "1" && "$STRUCTURE_SWANLAB_MODE" == "cloud" && -z "${SWANLAB_API_KEY:-}" && -r "$SWANLAB_CREDENTIAL_FILE" ]]; then
+STRUCTURE_SWANLAB_ID="${STRUCTURE_SWANLAB_ID:-}"
+STRUCTURE_SWANLAB_RESUME="${STRUCTURE_SWANLAB_RESUME:-never}"
+SWANLAB_CREDENTIAL_FILE="${SWANLAB_CREDENTIAL_FILE:-}"
+if [[ "$STRUCTURE_USE_SWANLAB" == "1" && "$STRUCTURE_SWANLAB_MODE" == "cloud" && -z "${SWANLAB_API_KEY:-}" && -n "$SWANLAB_CREDENTIAL_FILE" && -r "$SWANLAB_CREDENTIAL_FILE" ]]; then
     SWANLAB_API_KEY="$(
         awk '$1 == "password" {print $2; exit}' "$SWANLAB_CREDENTIAL_FILE"
     )"
@@ -26,19 +30,23 @@ if [[ "$STRUCTURE_USE_SWANLAB" == "1" && "$STRUCTURE_SWANLAB_MODE" == "cloud" &&
 fi
 
 if [[ $# -ne 5 ]]; then
-    echo "Usage: $0 GPU VARIANT SLUG BATCH_STAMP SWANLAB_GROUP" >&2
+    echo "Usage: $0 GPU_OR_COMMA_LIST VARIANT SLUG BATCH_STAMP SWANLAB_GROUP" >&2
     exit 2
 fi
-if [[ "$STRUCTURE_INIT_MODE" != "pretrained" && "$STRUCTURE_INIT_MODE" != "scratch" ]]; then
-    echo "STRUCTURE_INIT_MODE must be pretrained or scratch" >&2
+if [[ "$STRUCTURE_INIT_MODE" != "scratch" ]]; then
+    echo "Scratch-only policy requires STRUCTURE_INIT_MODE=scratch" >&2
     exit 2
 fi
 
-GPU_ID="$1"
+GPU_SPEC="$1"
 VARIANT="$2"
 SLUG="$3"
 BATCH_STAMP="$4"
 SWANLAB_GROUP="$5"
+csig_require_allowed_gpus "$GPU_SPEC"
+IFS=',' read -r -a TRAIN_GPU_IDS <<<"$GPU_SPEC"
+GPU_NUM="${#TRAIN_GPU_IDS[@]}"
+POSTPROCESS_GPU="${TRAIN_GPU_IDS[0]//[[:space:]]/}"
 RUN_DATE="${BATCH_STAMP%%_*}"
 DAY_ROOT="$REPO_ROOT/log/sem_seg/$RUN_DATE"
 EXPERIMENT_BASENAME="SatVideoIRSDT_v1__${BATCH_STAMP}__F1OHEM-${SLUG}_E100"
@@ -49,7 +57,7 @@ STATUS_FILE="$STATUS_DIR/${SLUG}.status"
 
 mkdir -p "$STATUS_DIR"
 printf 'RUNNING gpu=%s variant=%s init=%s started=%s\n' \
-    "$GPU_ID" "$VARIANT" "$STRUCTURE_INIT_MODE" "$(date --iso-8601=seconds)" >"$STATUS_FILE"
+    "$GPU_SPEC" "$VARIANT" "$STRUCTURE_INIT_MODE" "$(date --iso-8601=seconds)" >"$STATUS_FILE"
 
 on_error() {
     local exit_code=$?
@@ -59,16 +67,27 @@ on_error() {
 }
 trap on_error ERR
 
-base_checkpoint_arguments=()
-if [[ "$STRUCTURE_INIT_MODE" == "pretrained" ]]; then
-    base_checkpoint_arguments=(--base_ckpt "$BASE_CHECKPOINT")
-fi
 echo "Initialization mode: $STRUCTURE_INIT_MODE"
+
+test_amp_arguments=()
+if [[ "$TEST_USE_AMP" == "1" ]]; then
+    test_amp_arguments=(--amp)
+fi
+resume_checkpoint_arguments=()
+if [[ -n "$STRUCTURE_RESUME_CHECKPOINT" ]]; then
+    resume_checkpoint_arguments=(
+        --resume_checkpoint "$STRUCTURE_RESUME_CHECKPOINT"
+    )
+fi
+swanlab_id_arguments=()
+if [[ -n "$STRUCTURE_SWANLAB_ID" ]]; then
+    swanlab_id_arguments=(--swanlab_id "$STRUCTURE_SWANLAB_ID")
+fi
 
 cd "$REPO_ROOT"
 "$PYTHON_BIN" -u train.py \
-    --gpu "$GPU_ID" \
-    --gpu_num 1 \
+    --gpu "$GPU_SPEC" \
+    --gpu_num "$GPU_NUM" \
     --model "$MODEL" \
     --dataset SatVideoIRSDT_v1 \
     --datapath "$DATA_ROOT" \
@@ -78,7 +97,8 @@ cd "$REPO_ROOT"
     --learning_rate "$STRUCTURE_ADAPTER_LR" \
     --base_lr_mult "$STRUCTURE_BASE_LR_MULT" \
     --decay_rate 0.0001 \
-    --batch_size 20 \
+    --batch_size "$STRUCTURE_BATCH_SIZE" \
+    --gradient_accumulation_steps "$STRUCTURE_GRAD_ACCUM_STEPS" \
     --epoch 100 \
     --early_stopping_patience 30 \
     --early_stopping_min_delta 0.0001 \
@@ -98,19 +118,23 @@ cd "$REPO_ROOT"
     --tversky_fp_weight 0.6 \
     --tversky_fn_weight 0.4 \
     --hard_negative_topk 4096 \
-    "${base_checkpoint_arguments[@]}" \
     --structure_variant "$VARIANT" \
     --structure_bottleneck_channels 8 \
     --structure_max_shift 4.0 \
-    --eval_chunk_rows 64 \
-    --resume never \
+    --eval_chunk_rows "$TEST_EVAL_CHUNK_ROWS" \
+    --eval_amp "$TEST_USE_AMP" \
+    --eval_interval "$STRUCTURE_EVAL_INTERVAL" \
+    --resume "$STRUCTURE_RESUME_MODE" \
+    "${resume_checkpoint_arguments[@]}" \
     --seed "$STRUCTURE_SEED" \
     --deterministic 0 \
     --run_test_after_train 0 \
     --use_swanlab "$STRUCTURE_USE_SWANLAB" \
     --swanlab_project CSIG2026-DeepPro \
     --swanlab_group "$SWANLAB_GROUP" \
-    --swanlab_mode "$STRUCTURE_SWANLAB_MODE"
+    --swanlab_mode "$STRUCTURE_SWANLAB_MODE" \
+    --swanlab_resume "$STRUCTURE_SWANLAB_RESUME" \
+    "${swanlab_id_arguments[@]}"
 
 POST_ROOT="$EXPERIMENT_DIR/postprocess"
 PROBABILITY_ROOT="$POST_ROOT/probabilities"
@@ -147,7 +171,7 @@ for selector in "${CHECKPOINT_SELECTORS[@]}"; do
     sweep_csv="$RESULT_ROOT/${selector_slug}_centroid_f1.csv"
 
     "$PYTHON_BIN" -u test.py \
-        --gpu "$GPU_ID" \
+        --gpu "$POSTPROCESS_GPU" \
         --seqlen 40 \
         --datapath "$DATA_ROOT" \
         --dataset SatVideoIRSDT_v1 \
@@ -160,7 +184,8 @@ for selector in "${CHECKPOINT_SELECTORS[@]}"; do
         --output_only \
         --test_workers 2 \
         --prefetch_factor 1 \
-        --eval_chunk_rows 64 \
+        --eval_chunk_rows "$TEST_EVAL_CHUNK_ROWS" \
+        "${test_amp_arguments[@]}" \
         >"$LOG_ROOT/export_${selector_slug}.log" 2>&1
 
     "$PYTHON_BIN" -u tools/centroid_f1_sweep.py \

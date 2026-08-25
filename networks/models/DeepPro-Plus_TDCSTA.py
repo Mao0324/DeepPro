@@ -48,6 +48,10 @@ class TDCSTAFront(nn.Module):
         self.freeze_spatial = False 
 
     def load_pretrained_branches(self, spatial_ckpt=None, st_ckpt=None):
+        if spatial_ckpt or st_ckpt:
+            raise ValueError(
+                "Scratch-only policy forbids loading spatial/st branch checkpoints"
+            )
         if spatial_ckpt is not None and spatial_ckpt != "":
             state = torch.load(
                 spatial_ckpt,
@@ -125,7 +129,7 @@ class TDCSTAFront(nn.Module):
 
 class detector(nn.Module):
     def __init__(self, num_classes, seqlen=100, out_len=100,
-                 spatial_ckpt=None, st_ckpt=None, freeze_pretrained=True):
+                 spatial_ckpt=None, st_ckpt=None, freeze_pretrained=False):
         super(detector, self).__init__()
         self.out_len = out_len
         # self.conv_in = nn.Sequential(SDifferenceConv(in_channels=1, out_channels=8, kernel_size=(5,7,7), stride=(1,1,1), padding=(2,3,3)),

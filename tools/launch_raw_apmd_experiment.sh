@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO_ROOT="/home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/project_runtime_env.sh"
 RUNNER="$REPO_ROOT/tools/run_structure_candidate_experiment.sh"
 GPU_ID="${1:-0}"
 
-if [[ $# -gt 1 || ! "$GPU_ID" =~ ^[0-7]$ ]]; then
-    echo "Usage: $0 [GPU_ID_0_TO_7]" >&2
+if [[ $# -gt 1 || ! "$GPU_ID" =~ ^[0-9]+$ ]]; then
+    echo "Usage: $0 [GPU_ID]" >&2
     exit 2
 fi
+csig_require_allowed_gpu "$GPU_ID"
 
 used_memory="$({
     nvidia-smi --id="$GPU_ID" --query-gpu=memory.used \

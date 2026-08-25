@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO_ROOT="/home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main"
-PYTHON_BIN="/home/devbox/project/model/miniconda3/envs/sjyPID/bin/python"
-DATA_ROOT="/home/devbox/project/model/sjy/CSIG2026/datasets/SatVideoIRSDT_v1"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/project_runtime_env.sh"
 MODEL="DeepPro-Plus_BRTD3"
 THRESHOLD_GRID="${THRESHOLD_GRID:-0.10:0.95:0.01}"
 EXPECTED_PROBABILITY_FILES="${EXPECTED_PROBABILITY_FILES:-23087}"
@@ -14,6 +12,7 @@ if [[ $# -ne 4 ]]; then
 fi
 
 GPU_ID="$1"
+csig_require_allowed_gpu "$GPU_ID"
 VARIANT="$2"
 SLUG="$3"
 BATCH_STAMP="$4"
@@ -31,6 +30,10 @@ LOG_ROOT="$POST_ROOT/logs"
 SUBMISSION_ROOT="$EXPERIMENT_DIR/submission"
 CHECKPOINT_DIR="$EXPERIMENT_DIR/checkpoints"
 MODEL_LOG="$EXPERIMENT_DIR/logs/${MODEL}.txt"
+test_amp_arguments=()
+if [[ "$TEST_USE_AMP" == "1" ]]; then
+    test_amp_arguments=(--amp)
+fi
 
 if [[ ! -d "$EXPERIMENT_DIR" || ! -d "$CHECKPOINT_DIR" || ! -f "$MODEL_LOG" ]]; then
     echo "Completed training artifacts are missing: $EXPERIMENT_DIR" >&2
@@ -132,7 +135,8 @@ for selector in "${CHECKPOINT_SELECTORS[@]}"; do
                 --output_only \
                 --test_workers 2 \
                 --prefetch_factor 1 \
-                --eval_chunk_rows 64 \
+                --eval_chunk_rows "$TEST_EVAL_CHUNK_ROWS" \
+                "${test_amp_arguments[@]}" \
                 >"$LOG_ROOT/export_${selector_slug}.resume.log" 2>&1
             if ! probability_export_is_complete "$probability_dir"; then
                 echo "Probability export count mismatch for $selector_slug" >&2

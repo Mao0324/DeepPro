@@ -193,12 +193,25 @@ def parse_args():
     parser.add_argument('--resume_checkpoint', type=str, default=None)
     parser.add_argument("--spatial_ckpt", type=str, default="")
     parser.add_argument("--st_ckpt", type=str, default="")
-    parser.add_argument("--freeze_pretrained", type=int, default=1)
+    parser.add_argument("--freeze_pretrained", type=int, default=0)
 
     return parser.parse_args()
 
 
 def main(args):
+    pretrained_inputs = {
+        '--base_ckpt': args.base_ckpt,
+        '--spatial_ckpt': args.spatial_ckpt,
+        '--st_ckpt': args.st_ckpt,
+    }
+    requested_pretrained = {
+        name: value for name, value in pretrained_inputs.items() if value
+    }
+    if requested_pretrained:
+        raise ValueError(
+            'Scratch-only policy forbids pretrained initialization: %s'
+            % requested_pretrained
+        )
     if args.accumulation_steps < 1:
         raise ValueError('--accumulation_steps must be at least 1.')
     if args.batch_size <= 0 or args.gpu_num <= 0 or args.train_workers < 0:

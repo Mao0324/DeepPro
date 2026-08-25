@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check every BRTD3 variant for pretrain identity and gradient flow."""
+"""Check every BRTD3 variant for scratch identity and gradient flow."""
 
 import argparse
 import importlib
@@ -13,16 +13,10 @@ if str(PROJECT_ROOT) not in sys.path:
 import torch
 
 from networks.layers.structure_adapters import STRUCTURE_VARIANTS
-from runtime_utils import load_checkpoint
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        '--checkpoint', type=Path,
-        default=PROJECT_ROOT / 'pretrained'
-        / 'SatVideoIRSDT_DeepPro-Plus_pretrained_init.pth',
-    )
     parser.add_argument('--variant', choices=('all',) + STRUCTURE_VARIANTS,
                         default='all')
     parser.add_argument('--device', default='cpu')
@@ -99,12 +93,6 @@ def main():
         args.batch_size, args.seqlen, args.height, args.width
     ) <= 0:
         raise ValueError('batch size and tensor dimensions must be positive')
-    checkpoint_path = args.checkpoint.expanduser().resolve()
-    if not checkpoint_path.is_file():
-        raise FileNotFoundError(checkpoint_path)
-
-    checkpoint = load_checkpoint(checkpoint_path, map_location='cpu')
-    state_dict = checkpoint.get('model_state_dict', checkpoint)
     base_module = importlib.import_module('networks.models.DeepPro-Plus')
     brtd3_module = importlib.import_module(
         'networks.models.DeepPro-Plus_BRTD3'
@@ -112,7 +100,13 @@ def main():
     base = base_module.detector(
         1, args.seqlen, args.seqlen
     ).to(args.device).eval()
-    base.load_state_dict(state_dict, strict=True)
+    # Compare with the same freshly randomized backbone. The check therefore
+    # proves the adapter's zero-residual identity without loading any external
+    # initialization weights.
+    state_dict = {
+        key: value.detach().cpu().clone()
+        for key, value in base.state_dict().items()
+    }
     inputs = torch.randn(
         args.batch_size, 1, args.seqlen, args.height, args.width,
         device=args.device,
@@ -139,17 +133,25 @@ def main():
         ]
         if invalid_missing or incompatible.unexpected_keys:
             raise RuntimeError(
-                '%s pretrain mismatch missing=%s unexpected=%s'
+                '%s scratch-backbone mismatch missing=%s unexpected=%s'
                 % (variant, invalid_missing, incompatible.unexpected_keys)
             )
         model = model.to(args.device).eval()
         with torch.no_grad():
             _, logits, auxiliary = model(inputs, return_aux=True)
         maximum_error = (logits - base_logits).abs().max().item()
-        if maximum_error != 0.0:
+        projection_init_scale = float(getattr(
+            model.brtd, 'projection_init_scale', 0.0
+        ))
+        if projection_init_scale == 0.0 and maximum_error != 0.0:
             raise RuntimeError(
                 '%s zero-init prediction error is %.9g'
                 % (variant, maximum_error)
+            )
+        if projection_init_scale > 0.0 and maximum_error == 0.0:
+            raise RuntimeError(
+                '%s scaled projection produced an identity prediction'
+                % variant
             )
         if not auxiliary:
             raise RuntimeError('%s returned no diagnostics' % variant)
@@ -171,6 +173,16 @@ def main():
         if not gradient_sum > 0.0:
             raise RuntimeError(
                 '%s has no residual-projection gradient' % variant
+            )
+        upstream_gradient_sum = sum(
+            parameter.grad.abs().sum().item()
+            for name, parameter in model.brtd.named_parameters()
+            if 'projection.weight' not in name
+            and parameter.grad is not None
+        )
+        if projection_init_scale > 0.0 and not upstream_gradient_sum > 0.0:
+            raise RuntimeError(
+                '%s has no first-step upstream adapter gradient' % variant
             )
         adapter_parameters = sum(
             parameter.numel() for parameter in model.brtd.parameters()
@@ -205,15 +217,25 @@ def main():
                 raise RuntimeError(
                     'raw_apmd contrast weights are not normalized'
                 )
+        if 'scratch_bandpass' in variant:
+            if 'temporal_bandpass' not in auxiliary:
+                raise RuntimeError('%s returned no temporal bandpass' % variant)
+        if 'scratch_detail' in variant:
+            if 'backbone_detail' not in auxiliary:
+                raise RuntimeError('%s returned no backbone detail' % variant)
         print(
-            '%-18s PASS new_keys=%d adapter_params=%d '
-            'loss=%.6f projection_grad=%.6f'
+            '%-18s PASS new_keys=%d adapter_params=%d init_scale=%.3f '
+            'identity_error=%.3g loss=%.6f projection_grad=%.6f '
+            'upstream_grad=%.6f'
             % (
                 variant,
                 len(incompatible.missing_keys),
                 adapter_parameters,
+                projection_init_scale,
+                maximum_error,
                 float(loss.detach()),
                 gradient_sum,
+                upstream_gradient_sum,
             )
         )
         del model, prediction, target, loss

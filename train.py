@@ -3,6 +3,7 @@ Author: Benny
 Date: Nov 2019
 """
 import argparse
+from contextlib import nullcontext
 import gc
 import inspect
 import os
@@ -212,13 +213,15 @@ def evaluate_sequences(
     threshold,
     epoch,
     show_progress,
+    use_amp=False,
 ):
-    """Evaluate each physical frame once after overlap-aware stitching."""
+    """Return local validation sums after overlap-aware stitching."""
     detector.eval()
-    metric_counts = torch.zeros(3, device=device, dtype=torch.int64)
-    loss_sum = torch.zeros((), device=device, dtype=torch.float64)
+    metric_counts = torch.zeros(3, dtype=torch.int64)
+    loss_sum = 0.0
     loss_count = 0
     validation_iterator = iter(validation_loader)
+    previous_spatial_size = None
 
     with torch.inference_mode():
         for sequence_dataset in tqdm(
@@ -232,9 +235,21 @@ def evaluate_sequences(
                 images, targets, _centroids, first_end = next(
                     validation_iterator
                 )
+                spatial_size = tuple(images.shape[-2:])
+                if (
+                    previous_spatial_size is not None
+                    and spatial_size != previous_spatial_size
+                ):
+                    torch.cuda.empty_cache()
+                previous_spatial_size = spatial_size
                 images = images.float().to(device, non_blocking=True)
                 targets = targets.float().to(device, non_blocking=True)
-                sequence_features, sequence_logits = detector(images)
+                with torch.autocast(
+                    device_type='cuda',
+                    dtype=torch.float16,
+                    enabled=use_amp,
+                ):
+                    sequence_features, sequence_logits = detector(images)
                 del sequence_features
                 if sequence_logits.shape[-2:] != targets.shape[-2:]:
                     sequence_logits = F.interpolate(
@@ -247,18 +262,25 @@ def evaluate_sequences(
                 valid_logits = sequence_logits[:, :valid_length]
                 valid_targets = targets[:, :valid_length]
                 valid_images = images[:, :, :valid_length]
-                loss_sum += criterion(
-                    valid_logits,
-                    valid_targets,
-                    images=valid_images,
-                    epoch=epoch,
-                ).to(torch.float64)
+                with torch.autocast(
+                    device_type='cuda',
+                    dtype=torch.float16,
+                    enabled=use_amp,
+                ):
+                    window_loss = criterion(
+                        valid_logits,
+                        valid_targets,
+                        images=valid_images,
+                        epoch=epoch,
+                    )
+                loss_sum += float(window_loss.detach().cpu())
                 loss_count += 1
                 accumulator.add(
-                    torch.sigmoid(valid_logits),
-                    valid_targets,
+                    torch.sigmoid(valid_logits.float()).cpu(),
+                    valid_targets.cpu(),
                     first_end,
                 )
+                del window_loss
                 del sequence_logits, valid_logits, valid_targets, valid_images
                 del images, targets, _centroids
 
@@ -273,8 +295,7 @@ def evaluate_sequences(
 
     if loss_count == 0:
         raise RuntimeError('Validation loader contains no windows.')
-    metrics = binary_segmentation_metrics(*metric_counts)
-    return (loss_sum / loss_count).item(), metrics
+    return loss_sum, loss_count, metric_counts
 
 
 def multiprocessing_loader_options(worker_count, prefetch_factor):
@@ -311,6 +332,12 @@ def parse_args():
     parser = argparse.ArgumentParser('Model')
     parser.add_argument('--model', type=str, default='DeepPro-Plus', help='model name [default: pointnet_sem_seg]')
     parser.add_argument('--batch_size', type=int, default=4, help='Batch Size during training [default: 16]')
+    parser.add_argument(
+        '--gradient_accumulation_steps',
+        type=int,
+        default=1,
+        help='Accumulate this many physical batches before each optimizer step.',
+    )
     parser.add_argument('--epoch', default=32, type=int, help='Epoch to run [default: 32]')
     parser.add_argument('--learning_rate', default=0.005, type=float, help='Initial learning rate [default: 0.001]')
     parser.add_argument('--gpu', type=str, default='0', help='GPU to use [default: GPU 0]')
@@ -421,9 +448,17 @@ def parse_args():
                         default='never', help='SwanLab run resume policy')
     parser.add_argument("--spatial_ckpt", type=str, default="")
     parser.add_argument("--st_ckpt", type=str, default="")
-    parser.add_argument("--freeze_pretrained", type=int, default=1)
+    parser.add_argument("--freeze_pretrained", type=int, default=0)
     parser.add_argument('--eval_chunk_rows', type=int, default=0,
                         help='TPro evaluation row chunk size; 0 disables chunking')
+    parser.add_argument(
+        '--eval_amp', type=int, default=0, choices=[0, 1],
+        help='Use FP16 CUDA autocast during validation [default: 0].',
+    )
+    parser.add_argument(
+        '--eval_interval', type=int, default=1,
+        help='Run full validation every N epochs and always on the final epoch.',
+    )
     parser.add_argument('--seed', type=int, default=46)
     parser.add_argument('--deterministic', type=int, default=0, choices=[0, 1],
                         help='Use deterministic cuDNN kernels (may reduce speed)')
@@ -452,6 +487,9 @@ def parse_args():
             'raw_apmd_motion_detrend',
             'raw_apmd_multiscale_contrast',
             'raw_apmd_hybrid_rms',
+            'raw_apmd_hybrid_rms_scratch_init',
+            'raw_apmd_hybrid_rms_scratch_bandpass',
+            'raw_apmd_hybrid_rms_scratch_detail',
             'raw_apmd_hybrid_rms_motion_detrend',
             'raw_apmd_hybrid_rms_multiscale_contrast',
             'raw_apmd_hybrid_rms_motion_detrend_multiscale_contrast',
@@ -475,14 +513,36 @@ def parse_args():
 
 
 def main(args):
+    pretrained_inputs = {
+        '--base_ckpt': args.base_ckpt,
+        '--spatial_ckpt': args.spatial_ckpt,
+        '--st_ckpt': args.st_ckpt,
+    }
+    requested_pretrained = {
+        name: value for name, value in pretrained_inputs.items() if value
+    }
+    if requested_pretrained:
+        raise ValueError(
+            'Scratch-only policy forbids pretrained initialization: %s'
+            % requested_pretrained
+        )
     if args.train_workers < 0 or args.val_workers < 0:
         raise ValueError('DataLoader worker counts must be non-negative.')
     if args.prefetch_factor <= 0:
         raise ValueError('prefetch_factor must be positive.')
-    if args.batch_size <= 0 or args.gpu_num <= 0:
-        raise ValueError('batch_size and gpu_num must be positive.')
+    if (
+        args.batch_size <= 0
+        or args.gpu_num <= 0
+        or args.gradient_accumulation_steps <= 0
+    ):
+        raise ValueError(
+            'batch_size, gpu_num, and gradient_accumulation_steps '
+            'must be positive.'
+        )
     if args.eval_chunk_rows < 0:
         raise ValueError('eval_chunk_rows must be non-negative.')
+    if args.eval_interval <= 0:
+        raise ValueError('eval_interval must be positive.')
     if args.early_stopping_patience < 0:
         raise ValueError('early_stopping_patience must be non-negative.')
     if args.early_stopping_min_delta < 0:
@@ -704,40 +764,51 @@ def main(args):
     validationDataLoader = None
     if runtime.is_main:
         log_string("start loading validation data ...")
-        TEST_DATASET = TestIRSeqDataLoader(
-            args.dataset,
-            data_root=root,
-            seq_len=SEQ_LEN,
-            cat_len=int(SEQ_LEN * 0.1),
-            transform=None,
+    TEST_DATASET = TestIRSeqDataLoader(
+        args.dataset,
+        data_root=root,
+        seq_len=SEQ_LEN,
+        cat_len=int(SEQ_LEN * 0.1),
+        transform=None,
+    )
+    sequence_datasets = [
+        TEST_DATASET[index]
+        for index in range(runtime.rank, len(TEST_DATASET), runtime.world_size)
+    ]
+    if not sequence_datasets:
+        finalize_distributed(runtime)
+        raise RuntimeError('Validation shard contains no sequences.')
+    validationDataLoader = torch.utils.data.DataLoader(
+        ConcatDataset(sequence_datasets),
+        batch_size=1,
+        shuffle=False,
+        pin_memory=True,
+        **multiprocessing_loader_options(
+            args.val_workers,
+            args.prefetch_factor,
         )
-        sequence_datasets = [
-            TEST_DATASET[index] for index in range(len(TEST_DATASET))
-        ]
-        validationDataLoader = torch.utils.data.DataLoader(
-            ConcatDataset(sequence_datasets),
-            batch_size=1,
-            shuffle=False,
-            pin_memory=True,
-            **multiprocessing_loader_options(
-                args.val_workers,
-                args.prefetch_factor,
-            )
-        )
+    )
 
     log_string("The number of training data is: %d" % len(TRAIN_DATASET))
     if runtime.is_main:
         log_string("The number of test data is: %d sequences" % len(TEST_DATASET))
         log_string(
             "DDP world_size=%d, global_batch=%d, per_rank_batch=%d; "
+            "gradient_accumulation=%d, effective_batch=%d; "
             "DataLoader workers per rank=%d, validation=%d"
             % (
                 runtime.world_size,
                 args.batch_size,
                 local_batch_size,
+                args.gradient_accumulation_steps,
+                args.batch_size * args.gradient_accumulation_steps,
                 train_workers,
                 args.val_workers,
             )
+        )
+        log_string(
+            'Validation interval=%d; validation is sharded across %d rank(s).'
+            % (args.eval_interval, runtime.world_size)
         )
 
     '''MODEL LOADING'''
@@ -1023,13 +1094,15 @@ def main(args):
             dtype=torch.float64,
         )
         detector.train()
+        optimizer.zero_grad(set_to_none=True)
+        training_batch_count = len(trainDataLoader)
 
-        for images, targets in tqdm(
+        for batch_index, (images, targets) in enumerate(tqdm(
             trainDataLoader,
             total=len(trainDataLoader),
             smoothing=0.9,
             disable=not runtime.is_main,
-        ):
+        )):
             valid_frames = None
             if args.mask_padded_frames:
                 valid_frames = images.abs().sum(dim=(1, 3, 4)).ne(0)
@@ -1040,24 +1113,43 @@ def main(args):
                 valid_frames = valid_frames.to(
                     runtime.device, non_blocking=True
                 )
-            optimizer.zero_grad(set_to_none=True)
             images = images.float().to(runtime.device, non_blocking=True)
             targets = targets.float().to(runtime.device, non_blocking=True)
 
-            sequence_features, seq_midpred = detector(images)
-            del sequence_features
-
-            criterion_arguments = {
-                'images': images,
-                'epoch': epoch,
-            }
-            if valid_frames is not None:
-                criterion_arguments['valid_frames'] = valid_frames
-            loss = criterion(
-                seq_midpred, targets, **criterion_arguments
+            accumulation_window_start = (
+                batch_index // args.gradient_accumulation_steps
+            ) * args.gradient_accumulation_steps
+            accumulation_window_size = min(
+                args.gradient_accumulation_steps,
+                training_batch_count - accumulation_window_start,
             )
-            loss.backward()
-            optimizer.step()
+            should_step = (
+                (batch_index + 1) % args.gradient_accumulation_steps == 0
+                or batch_index + 1 == training_batch_count
+            )
+            synchronization_context = (
+                nullcontext()
+                if should_step
+                or not isinstance(detector, DistributedDataParallel)
+                else detector.no_sync()
+            )
+            with synchronization_context:
+                sequence_features, seq_midpred = detector(images)
+                del sequence_features
+
+                criterion_arguments = {
+                    'images': images,
+                    'epoch': epoch,
+                }
+                if valid_frames is not None:
+                    criterion_arguments['valid_frames'] = valid_frames
+                loss = criterion(
+                    seq_midpred, targets, **criterion_arguments
+                )
+                (loss / accumulation_window_size).backward()
+            if should_step:
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
 
             with torch.no_grad():
                 midpred_choice = torch.sigmoid(seq_midpred.detach()).gt(
@@ -1135,11 +1227,39 @@ def main(args):
             })
             swanlab_module.log(swanlab_metrics, step=epoch + 1)
 
+        should_evaluate = (
+            (epoch + 1) % args.eval_interval == 0
+            or epoch + 1 == args.epoch
+        )
+        if not should_evaluate:
+            distributed_barrier(runtime)
+            if runtime.is_main:
+                state = make_checkpoint_state(
+                    detector,
+                    optimizer,
+                    epoch,
+                    best_iou,
+                    args,
+                    config,
+                    early_stopping_state=early_stopping_state,
+                )
+                latest_path = checkpoints_dir / 'latest_model.pth'
+                atomic_torch_save(state, latest_path)
+                del state
+                log_string(
+                    'Skipped full validation at epoch %d '
+                    '(eval_interval=%d); saved recoverable checkpoint.'
+                    % (epoch + 1, args.eval_interval)
+                )
+            distributed_barrier(runtime)
+            release_cuda_memory('validation skip cleanup')
+            continue
+
         distributed_barrier(runtime)
-        stop_training = False
         if runtime.is_main:
             log_string('---- EPOCH %03d EVALUATION ----' % (epoch + 1))
-            eval_loss, eval_metrics = evaluate_sequences(
+        local_loss_sum, local_loss_count, local_metric_counts = (
+            evaluate_sequences(
                 unwrap_model(detector),
                 criterion,
                 sequence_datasets,
@@ -1147,9 +1267,29 @@ def main(args):
                 runtime.device,
                 args.threshold_eval,
                 epoch,
-                show_progress=True,
+                show_progress=runtime.is_main,
+                use_amp=bool(args.eval_amp),
             )
-            mIoU_mid, eval_precision, eval_recall, eval_f1 = eval_metrics
+        )
+        eval_loss_stats = torch.tensor(
+            [local_loss_sum, local_loss_count],
+            device=runtime.device,
+            dtype=torch.float64,
+        )
+        eval_metric_counts = local_metric_counts.to(
+            device=runtime.device, non_blocking=True
+        )
+        all_reduce_sum(eval_loss_stats, runtime)
+        all_reduce_sum(eval_metric_counts, runtime)
+        eval_loss = (
+            eval_loss_stats[0] / eval_loss_stats[1].clamp_min(1.0)
+        ).item()
+        eval_metrics = binary_segmentation_metrics(*eval_metric_counts)
+        mIoU_mid, eval_precision, eval_recall, eval_f1 = eval_metrics
+        del local_metric_counts, eval_loss_stats, eval_metric_counts
+
+        stop_training = False
+        if runtime.is_main:
             log_string('Eval mean loss: %f' % eval_loss)
             log_string('Eval avg class IoU of prediction: %f' % (mIoU_mid))
             log_string('Eval pixel precision: %f' % eval_precision)
@@ -1315,5 +1455,6 @@ if __name__ == '__main__':
             '--eval_chunk_rows',
             str(args.eval_chunk_rows),
         ]
+        if args.eval_amp:
+            test_command.append('--amp')
         subprocess.run(test_command, check=True, cwd=BASE_DIR)
-

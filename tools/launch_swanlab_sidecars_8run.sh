@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO_ROOT="/home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main"
-PYTHON_BIN="/home/devbox/project/model/miniconda3/envs/sjyPID/bin/python"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/project_runtime_env.sh"
 STREAMER="$REPO_ROOT/tools/stream_training_log_to_swanlab.py"
 RUN_DATE="2026-08-22"
 BATCH_STAMP="2026-08-22_08-27-32"
@@ -12,9 +11,9 @@ DAY_ROOT="$REPO_ROOT/log/sem_seg/$RUN_DATE"
 STATUS_ROOT="$DAY_ROOT/_structure_pipeline_status"
 SIDECAR_ROOT="$DAY_ROOT/_swanlab_sidecars"
 GROUP="f1_hybrid_rms_init_ablation_seed47_${BATCH_STAMP}"
-SWANLAB_CREDENTIAL_FILE="${SWANLAB_CREDENTIAL_FILE:-/home/devbox/project/model/.swanlab/.netrc}"
+SWANLAB_CREDENTIAL_FILE="${SWANLAB_CREDENTIAL_FILE:-}"
 
-if [[ -z "${SWANLAB_API_KEY:-}" && -r "$SWANLAB_CREDENTIAL_FILE" ]]; then
+if [[ -z "${SWANLAB_API_KEY:-}" && -n "$SWANLAB_CREDENTIAL_FILE" && -r "$SWANLAB_CREDENTIAL_FILE" ]]; then
     SWANLAB_API_KEY="$(awk '$1 == "password" {print $2; exit}' "$SWANLAB_CREDENTIAL_FILE")"
     export SWANLAB_API_KEY
 fi

@@ -1,8 +1,9 @@
-"""Zero-initialized structural adapters for DeepPro-Plus ablations.
+"""Structural adapters for DeepPro-Plus ablations.
 
 All modules preserve ``[B,C,T,H,W]`` shape and keep an explicit appearance
-path.  Their final projection is zero initialized so a pretrained
-DeepPro-Plus model produces identical logits immediately after insertion.
+path.  Historical variants retain a zero-initialized final projection for
+reproducibility.  Scratch-specific variants use a small non-zero residual
+projection so gradients reach the complete adapter on the first update.
 """
 
 import torch
@@ -17,6 +18,9 @@ STRUCTURE_VARIANTS = (
     'raw_apmd_motion_detrend',
     'raw_apmd_multiscale_contrast',
     'raw_apmd_hybrid_rms',
+    'raw_apmd_hybrid_rms_scratch_init',
+    'raw_apmd_hybrid_rms_scratch_bandpass',
+    'raw_apmd_hybrid_rms_scratch_detail',
     'raw_apmd_hybrid_rms_motion_detrend',
     'raw_apmd_hybrid_rms_multiscale_contrast',
     'raw_apmd_hybrid_rms_motion_detrend_multiscale_contrast',
@@ -94,6 +98,48 @@ def _zero_projection(in_channels, out_channels):
     )
     nn.init.zeros_(projection.weight)
     return projection
+
+
+def _scaled_projection(in_channels, out_channels, init_scale):
+    """Create a residual projection with controlled scratch initialization."""
+    init_scale = float(init_scale)
+    if init_scale < 0.0:
+        raise ValueError('projection init scale must be non-negative')
+    if init_scale == 0.0:
+        return _zero_projection(in_channels, out_channels)
+    projection = nn.Conv3d(
+        in_channels, out_channels, kernel_size=1, bias=False
+    )
+    nn.init.kaiming_normal_(projection.weight, nonlinearity='linear')
+    with torch.no_grad():
+        projection.weight.mul_(init_scale)
+    return projection
+
+
+def _masked_temporal_average(features, valid_mask, kernel_size):
+    """Average valid temporal samples without turning padding into signal."""
+    if kernel_size <= 0 or kernel_size % 2 == 0:
+        raise ValueError('temporal averaging kernel must be positive and odd')
+    valid = valid_mask.to(dtype=features.dtype)
+    pooling_kernel = (kernel_size, 1, 1)
+    pooling_padding = (kernel_size // 2, 0, 0)
+    numerator = F.avg_pool3d(
+        features * valid,
+        kernel_size=pooling_kernel,
+        stride=1,
+        padding=pooling_padding,
+    )
+    denominator = F.avg_pool3d(
+        valid,
+        kernel_size=pooling_kernel,
+        stride=1,
+        padding=pooling_padding,
+    )
+    return torch.where(
+        denominator > 0,
+        numerator / denominator.clamp_min(1e-6),
+        torch.zeros_like(numerator),
+    )
 
 
 def _local_contrast(x):
@@ -258,11 +304,12 @@ class _FramewiseHybridRMSNorm(nn.Module):
 class RawAppearanceMotionAdapter(nn.Module):
     """Preserve raw appearance and add multi-scale first/second dynamics.
 
-    DeepPro's pretrained difference stream remains the identity path.  This
-    adapter separately encodes each raw frame, estimates motion at temporal
-    offsets 1/2/4, and injects only a zero-initialized additive residual.  The
-    adapter therefore starts with exactly the pretrained logits and can learn
-    signed corrections without a gate suppressing weak-target evidence.
+    The backbone difference stream remains the identity path.  This adapter
+    separately encodes each raw frame, estimates motion at temporal offsets
+    1/2/4, and injects an additive residual without a gate suppressing weak
+    target evidence.  ``projection_init_scale=0`` reproduces the historical
+    identity initialization; a small positive scale is intended for training
+    the whole detector from scratch.
     """
 
     def __init__(
@@ -273,6 +320,9 @@ class RawAppearanceMotionAdapter(nn.Module):
         normalization='group',
         motion_detrend=False,
         adaptive_contrast=False,
+        projection_init_scale=0.0,
+        temporal_bandpass=False,
+        backbone_detail=False,
     ):
         super().__init__()
         if not temporal_steps or any(step <= 0 for step in temporal_steps):
@@ -289,8 +339,14 @@ class RawAppearanceMotionAdapter(nn.Module):
         self.normalization = normalization
         self.motion_detrend = bool(motion_detrend)
         self.adaptive_contrast = bool(adaptive_contrast)
+        self.projection_init_scale = float(projection_init_scale)
+        if self.projection_init_scale < 0.0:
+            raise ValueError('projection_init_scale must be non-negative')
+        self.temporal_bandpass = bool(temporal_bandpass)
+        self.backbone_detail = bool(backbone_detail)
         self.motion_detrend_kernel = 15
         self.contrast_kernel_sizes = (3, 5, 7)
+        self.temporal_bandpass_kernels = (3, 9)
 
         groups = _group_count(self.bottleneck_channels)
 
@@ -351,9 +407,23 @@ class RawAppearanceMotionAdapter(nn.Module):
             frame_norm(),
             nn.SiLU(inplace=True),
         )
+        if self.backbone_detail:
+            self.backbone_detail_encoder = nn.Sequential(
+                nn.Conv3d(
+                    self.channels,
+                    self.bottleneck_channels,
+                    kernel_size=1,
+                    bias=False,
+                ),
+                frame_norm(),
+                nn.SiLU(inplace=True),
+            )
+        domain_count = 3 + int(self.temporal_bandpass) + int(
+            self.backbone_detail
+        )
         self.domain_fusion = nn.Sequential(
             nn.Conv3d(
-                self.bottleneck_channels * 3,
+                self.bottleneck_channels * domain_count,
                 self.bottleneck_channels,
                 kernel_size=(1, 3, 3),
                 padding=(0, 1, 1),
@@ -362,8 +432,10 @@ class RawAppearanceMotionAdapter(nn.Module):
             frame_norm(),
             nn.SiLU(inplace=True),
         )
-        self.projection = _zero_projection(
-            self.bottleneck_channels, self.channels
+        self.projection = _scaled_projection(
+            self.bottleneck_channels,
+            self.channels,
+            self.projection_init_scale,
         )
 
     @staticmethod
@@ -460,9 +532,25 @@ class RawAppearanceMotionAdapter(nn.Module):
         else:
             contrast = _local_contrast(appearance)
         contrast = contrast * valid
-        fused = self.domain_fusion(torch.cat([
-            appearance, motion, contrast
-        ], dim=1)) * valid
+        domains = [appearance, motion, contrast]
+        temporal_bandpass = None
+        if self.temporal_bandpass:
+            short_kernel, long_kernel = self.temporal_bandpass_kernels
+            short_context = _masked_temporal_average(
+                appearance, valid_mask, short_kernel
+            )
+            long_context = _masked_temporal_average(
+                appearance, valid_mask, long_kernel
+            )
+            temporal_bandpass = (short_context - long_context) * valid
+            domains.append(temporal_bandpass)
+        backbone_detail = None
+        if self.backbone_detail:
+            backbone_detail = self.backbone_detail_encoder(
+                backbone_features * valid
+            ) * valid
+            domains.append(backbone_detail)
+        fused = self.domain_fusion(torch.cat(domains, dim=1)) * valid
         delta = self.projection(fused)
         output = backbone_features + delta
         if not return_aux:
@@ -477,6 +565,10 @@ class RawAppearanceMotionAdapter(nn.Module):
             'second_order_scale_weights': second_weights[:, 0, :, 0, 0, 0],
             'residual_delta': delta,
         }
+        if temporal_bandpass is not None:
+            auxiliary['temporal_bandpass'] = temporal_bandpass
+        if backbone_detail is not None:
+            auxiliary['backbone_detail'] = backbone_detail
         if contrast_weights is not None:
             auxiliary['contrast_scale_weights'] = (
                 contrast_weights[:, 0, :, 0, 0, 0]
@@ -961,6 +1053,29 @@ def build_structure_adapter(
     if variant == 'raw_apmd_hybrid_rms':
         return RawAppearanceMotionAdapter(
             channels, bottleneck_channels, normalization='hybrid_rms'
+        )
+    if variant == 'raw_apmd_hybrid_rms_scratch_init':
+        return RawAppearanceMotionAdapter(
+            channels,
+            bottleneck_channels,
+            normalization='hybrid_rms',
+            projection_init_scale=0.05,
+        )
+    if variant == 'raw_apmd_hybrid_rms_scratch_bandpass':
+        return RawAppearanceMotionAdapter(
+            channels,
+            bottleneck_channels,
+            normalization='hybrid_rms',
+            projection_init_scale=0.05,
+            temporal_bandpass=True,
+        )
+    if variant == 'raw_apmd_hybrid_rms_scratch_detail':
+        return RawAppearanceMotionAdapter(
+            channels,
+            bottleneck_channels,
+            normalization='hybrid_rms',
+            projection_init_scale=0.05,
+            backbone_detail=True,
         )
     if variant == 'raw_apmd_hybrid_rms_motion_detrend':
         return RawAppearanceMotionAdapter(

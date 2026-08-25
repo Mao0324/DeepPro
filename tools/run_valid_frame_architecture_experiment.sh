@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO_ROOT="/home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main"
-PYTHON_BIN="/home/devbox/project/model/miniconda3/envs/sjyPID/bin/python"
-DATA_ROOT="/home/devbox/project/model/sjy/CSIG2026/datasets/SatVideoIRSDT_v1"
-BASE_CHECKPOINT="$REPO_ROOT/pretrained/SatVideoIRSDT_DeepPro-Plus_pretrained_init.pth"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/project_runtime_env.sh"
 EXPERIMENT_DAY="${EXPERIMENT_DAY:-2026-08-11}"
 EXPERIMENT_SEED="${EXPERIMENT_SEED:-46}"
 THRESHOLD_GRID="${THRESHOLD_GRID:-0.15:0.70:0.01}"
@@ -17,6 +14,7 @@ if [[ $# -ne 8 ]]; then
 fi
 
 GPU_ID="$1"
+csig_require_allowed_gpu "$GPU_ID"
 MODEL="$2"
 SLUG="$3"
 USE_BACKGROUND="$4"
@@ -71,12 +69,12 @@ cd "$REPO_ROOT"
     --tversky_fp_weight 0.6 \
     --tversky_fn_weight 0.4 \
     --hard_negative_topk 4096 \
-    --base_ckpt "$BASE_CHECKPOINT" \
     --brtd_use_background "$USE_BACKGROUND" \
     --brtd_adaptive_tdc "$ADAPTIVE_TDC" \
     --brtd_use_gate "$USE_GATE" \
     --brtd_zero_init 1 \
-    --eval_chunk_rows 64 \
+    --eval_chunk_rows "$TEST_EVAL_CHUNK_ROWS" \
+    --eval_amp "$TEST_USE_AMP" \
     --resume never \
     --seed "$EXPERIMENT_SEED" \
     --deterministic 0 \
@@ -94,6 +92,10 @@ SUBMISSION_ROOT="$EXPERIMENT_DIR/submission"
 CHECKPOINT_DIR="$EXPERIMENT_DIR/checkpoints"
 MODEL_LOG="$EXPERIMENT_DIR/logs/${MODEL}.txt"
 mkdir -p "$PROBABILITY_ROOT" "$RESULT_ROOT" "$LOG_ROOT" "$SUBMISSION_ROOT"
+test_amp_arguments=()
+if [[ "$TEST_USE_AMP" == "1" ]]; then
+    test_amp_arguments=(--amp)
+fi
 
 mapfile -t CHECKPOINT_SELECTORS < <(
     "$PYTHON_BIN" tools/select_eval_checkpoints.py \
@@ -134,7 +136,8 @@ for selector in "${CHECKPOINT_SELECTORS[@]}"; do
         --output_only \
         --test_workers 2 \
         --prefetch_factor 1 \
-        --eval_chunk_rows 64 \
+        --eval_chunk_rows "$TEST_EVAL_CHUNK_ROWS" \
+        "${test_amp_arguments[@]}" \
         >"$LOG_ROOT/export_${selector_slug}.log" 2>&1
 
     "$PYTHON_BIN" -u tools/centroid_f1_sweep.py \

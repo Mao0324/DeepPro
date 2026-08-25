@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO_ROOT="/home/devbox/project/model/sjy/CSIG2026/Deeppro_v2/DeepPro-main"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/project_runtime_env.sh"
 RUNNER="$REPO_ROOT/tools/run_structure_candidate_experiment.sh"
 BATCH_STAMP="$(date -u +%Y-%m-%d_%H-%M-%S)"
 RUN_DATE="${BATCH_STAMP%%_*}"
@@ -20,13 +20,14 @@ mapfile -t GPU_MEMORY < <(
     nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits
 )
 if [[ "${#GPU_MEMORY[@]}" -lt 2 ]]; then
-    echo "Expected at least 2 GPUs, found ${#GPU_MEMORY[@]}" >&2
+    echo "Expected physical GPUs 0-3, found ${#GPU_MEMORY[@]}" >&2
     exit 1
 fi
 
 mkdir -p "$SCREEN_LOG_ROOT" "$DAY_ROOT/_structure_pipeline_status"
 for configuration in "${CONFIGURATIONS[@]}"; do
     IFS='|' read -r gpu seed slug <<<"$configuration"
+    csig_require_allowed_gpu "$gpu"
     used_memory="${GPU_MEMORY[$gpu]//[[:space:]]/}"
     session="csig_apmd_rms_g${gpu}_seed${seed}_${BATCH_STAMP}"
     experiment="$DAY_ROOT/SatVideoIRSDT_v1__${BATCH_STAMP}__F1OHEM-${slug}_E100"

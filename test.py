@@ -66,6 +66,11 @@ def parse_args():
                         help='Run the extra THOP forward pass after evaluation')
     parser.add_argument('--eval_chunk_rows', type=int, default=None,
                         help='Override checkpoint TPro evaluation row chunk size')
+    parser.add_argument(
+        '--amp', action='store_true', default=False,
+        help='Use FP16 CUDA autocast for model inference while keeping '
+             'probabilities in FP32.',
+    )
     parser.add_argument('--overwrite_outputs', action='store_true', default=False,
                         help='Allow writing into non-empty visual/centroid directories')
     parser.add_argument('--threshold_eval', type=float, default=0.5, help='Threshold in evaluation [default: 0.5]')
@@ -306,7 +311,13 @@ def main(args):
     )
     del checkpoint
     detector = detector.cuda().eval()
+    torch.cuda.empty_cache()
+    torch.cuda.reset_peak_memory_stats()
     evaluator = None if args.output_only else ShootingRules()
+    if args.amp:
+        log_string('Inference precision: CUDA FP16 autocast with FP32 sigmoid')
+    else:
+        log_string('Inference precision: CUDA FP32')
 
     with torch.inference_mode():
         num_batches = len(test_dataloader)
@@ -330,6 +341,7 @@ def main(args):
 
         time_start = time.time()
         test_iterator = iter(test_dataloader)
+        previous_spatial_size = None
         for seq_idx, seq_dataset in tqdm(
             enumerate(sequence_datasets),
             total=len(sequence_datasets),
@@ -343,12 +355,23 @@ def main(args):
             for i in range(len(seq_dataset)):
                 images, targets, centroids, first_end = next(test_iterator)
                 sequence_spatial_size = tuple(images.shape[-2:])
+                if (
+                    previous_spatial_size is not None
+                    and sequence_spatial_size != previous_spatial_size
+                ):
+                    torch.cuda.empty_cache()
+                previous_spatial_size = sequence_spatial_size
                 images = images.float().cuda(non_blocking=True)
                 first_frame, end_frame = first_end
                 first_frame = int(first_frame.item())
                 end_frame = int(end_frame.item())
 
-                seq_features, seq_midpred = detector(images)
+                with torch.autocast(
+                    device_type='cuda',
+                    dtype=torch.float16,
+                    enabled=args.amp,
+                ):
+                    seq_features, seq_midpred = detector(images)
                 del seq_features
                 expected_spatial_size = (
                     tuple(images.shape[-2:]) if args.output_only
@@ -361,7 +384,7 @@ def main(args):
                         mode='bilinear',
                         align_corners=False,
                     )
-                window_prediction = torch.sigmoid(seq_midpred).cpu()
+                window_prediction = torch.sigmoid(seq_midpred.float()).cpu()
                 del seq_midpred, images
 
                 if seq_midpred_all is None:
@@ -498,6 +521,13 @@ def main(args):
         log_string(
             'Evaluation elapsed time: %.2f seconds for %d windows.'
             % (time_end - time_start, num_batches)
+        )
+        log_string(
+            'CUDA peak memory: allocated=%.3f GiB, reserved=%.3f GiB.'
+            % (
+                torch.cuda.max_memory_allocated() / (1024 ** 3),
+                torch.cuda.max_memory_reserved() / (1024 ** 3),
+            )
         )
         # print('FPS=%.3f' % (2000*1.2 / (time_end - time_start)))
         ############### log Pd&Fa results ###############
