@@ -23,6 +23,7 @@ EXPERIMENT_NAME="$RUN_DATE/$EXPERIMENT_BASENAME"
 EXPERIMENT_DIR="$DAY_ROOT/$EXPERIMENT_BASENAME"
 STATUS_DIR="$DAY_ROOT/_structure_pipeline_status"
 STATUS_FILE="$STATUS_DIR/${SLUG}.status"
+LOCK_FILE="$STATUS_DIR/${SLUG}.postprocess.lock"
 POST_ROOT="$EXPERIMENT_DIR/postprocess"
 PROBABILITY_ROOT="$POST_ROOT/probabilities"
 RESULT_ROOT="$POST_ROOT/results"
@@ -41,6 +42,11 @@ if [[ ! -d "$EXPERIMENT_DIR" || ! -d "$CHECKPOINT_DIR" || ! -f "$MODEL_LOG" ]]; 
 fi
 
 mkdir -p "$STATUS_DIR" "$PROBABILITY_ROOT" "$RESULT_ROOT" "$LOG_ROOT" "$SUBMISSION_ROOT"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "Postprocess recovery is already running for $SLUG" >&2
+    exit 75
+fi
 printf 'RUNNING gpu=%s variant=%s resumed_postprocess=%s\n' \
     "$GPU_ID" "$VARIANT" "$(date --iso-8601=seconds)" >"$STATUS_FILE"
 
