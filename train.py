@@ -1418,7 +1418,15 @@ def main(args):
             break
 
     if swanlab_run is not None and hasattr(swanlab_module, 'finish'):
-        swanlab_module.finish()
+        try:
+            swanlab_module.finish()
+        except Exception as error:
+            # Cloud finalization must not invalidate a fully completed local
+            # training run or prevent deterministic submission postprocessing.
+            log_string(
+                'WARNING: SwanLab finalization failed after training; '
+                'continuing with local artifacts: %s' % error
+            )
 
     del trainDataLoader, validationDataLoader
     del detector, criterion, optimizer
