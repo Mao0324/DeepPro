@@ -65,6 +65,8 @@ class detector(nn.Module):
             bottleneck_channels=structure_bottleneck_channels,
             max_shift=structure_max_shift,
         )
+        if self.adapter_position == 'raw_fusion':
+            self.brtd.low_memory_eval = self.eval_chunk_rows > 0
 
         self.TPro = TPro(
             d_model=32,

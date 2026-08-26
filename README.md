@@ -1,5 +1,62 @@
 # Probing Deep into Temporal Profile Makes the Infrared Small Target Detector Much Better
 
+> [!IMPORTANT]
+> This repository branch contains the CSIG2026 SatVideoIRSDT development line
+> built on top of the original DeepPro project. New experiments are
+> **scratch-only**: `train.py` rejects `base_ckpt`, `spatial_ckpt`, and
+> `st_ckpt`. Runtime launchers only allow physical GPUs **0, 1, and 2**.
+
+## CSIG2026 Development Status
+
+The current model family is `DeepPro-Plus_BRTD3` with a Raw-APMD Hybrid-RMS
+adapter. It keeps the full-resolution DeepPro-Plus difference backbone and
+TPro, while adding a raw-frame appearance path, multi-scale first/second-order
+motion, local contrast, valid-frame masking, and a lightweight residual
+projection.
+
+| Item | Current setting |
+|---|---|
+| Dataset | `SatVideoIRSDT_v1` (stored outside this repository) |
+| Main model | `DeepPro-Plus_BRTD3` |
+| Completed scratch reference | `raw_apmd_hybrid_rms_scratch_init`: website `86.45` |
+| Active structural candidate | `raw_apmd_hybrid_rms_scratch_bandpass` |
+| Initialization | Random weights only; pretrained initialization is forbidden |
+| Loss | `f1_calibrated_ohem` with valid-frame masking |
+| Training devices | One DDP job on physical GPUs `0,1,2` |
+| Monitoring | SwanLab cloud plus complete local logs |
+| Finalization | Pixel-F1 Top-5 -> centroid sweep -> tracking TXT -> validated ZIP |
+
+Start with these documents before running or changing an experiment:
+
+- [Model evolution, current architecture, and loss](docs/MODEL_EVOLUTION_ARCHITECTURE_AND_LOSS_2026-08-26.md)
+- [Documentation index](docs/README.md)
+- [Scratch-only model improvement record](SCRATCH_MODEL_IMPROVEMENT_2026-08-25.md)
+- [Website result analysis](WEBSITE_RESULTS_ANALYSIS_2026-08-25.md)
+- [Migration acceptance checklist](MIGRATION_ACCEPTANCE_2026-08-25.md)
+
+The principal implementation files are:
+
+```text
+train.py                                      unified scratch-only DDP training
+test.py                                       AMP/chunked probability export
+networks/models/DeepPro-Plus_BRTD3.py         current model container
+networks/layers/structure_adapters.py         Raw-APMD and structural variants
+networks/losses/segmentation_losses.py        selectable segmentation losses
+tools/project_runtime_env.sh                  paths and GPU allowlist
+tools/run_structure_candidate_experiment.sh  train-to-submission pipeline
+```
+
+Generated experiments, probability images, SwanLab caches, and submission
+artifacts remain under ignored runtime directories such as `log/` and are not
+part of ordinary source commits. The curated historical release under
+`release/2026-08-22_pretrained_vs_scratch_seed47/` is retained for audit and
+must not be interpreted as permission to initialize new training from its
+checkpoints.
+
+---
+
+## Original DeepPro Project
+
 Pytorch implementation of our deep temporal probe network (DeepPro).&nbsp;[**[Paper]**](https://arxiv.org/pdf/2506.12766)
 
 <img src="https://github.com/TinaLRJ/DeepPro/blob/main/fig1/Fig1-doublecolumn.png" width="800">
@@ -104,7 +161,7 @@ on SatVideoIRSDT
 | DeepPro-Plus | 57.82 | 49.56 | 53.37 | [[Weights]](https://github.com/TinaLRJ/DeepPro/tree/main/log/sem_seg/SatVideoIRSDT__2025-07-22_19-41__SoftLoUloss_DeepPro-Plus_DataL40/checkpoints/best_model.pth) |
 
 
-## Citiation
+## Citation
 ```
 @article{li2026probing,
   title={Probing deep into temporal profile makes the infrared small target detector much better},
@@ -125,7 +182,7 @@ on SatVideoIRSDT
 }
 ```
 
-## Citiation for SatVideoIRSDT Dataset
+## Citation for SatVideoIRSDT Dataset
 ```
 @article{li2026satvideodataset,
   title={Infrared video satellite aerial moving target detection dataset and its evaluation},

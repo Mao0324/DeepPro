@@ -1,8 +1,15 @@
 # 2026-08-22 Hybrid-RMS 预训练/随机初始化对照实验发布集
 
+> **历史发布集：** 本目录用于审计 2026-08-22 的 pretrained/scratch 配对结果。
+> 当前项目已经执行 scratch-only 策略，并且只允许 GPU 0、1、2；不要直接运行本目录
+> 记录的旧 8 卡预训练流程，也不要用这里的 checkpoint 初始化新训练。
+
 本目录是从完整实验目录中抽取的、适合纳入 GitHub 的可审计发布集。它包含 8 组实验的最佳后处理 checkpoint、训练与 SwanLab 侧车日志、阈值扫描结果、提交包和验证记录，但不包含体积很大的逐帧概率缓存与所有中间 epoch 权重。
 
-完整项目迁移、模型与损失演化、历史实验结果和新服务器复现步骤见仓库根目录的 `MIGRATION_HANDOFF_2026-08-24.md`。
+当前模型与损失说明见
+[`docs/MODEL_EVOLUTION_ARCHITECTURE_AND_LOSS_2026-08-26.md`](../../docs/MODEL_EVOLUTION_ARCHITECTURE_AND_LOSS_2026-08-26.md)，
+文档导航见 [`docs/README.md`](../../docs/README.md)。完整迁移历史仍保存在根目录
+[`MIGRATION_HANDOFF_2026-08-24.md`](../../MIGRATION_HANDOFF_2026-08-24.md)，其中的预训练建议和旧服务器 GPU 配置仅用于审计。
 
 ## 核心结论
 
@@ -56,17 +63,19 @@
 sha256sum -c SHA256SUMS
 ```
 
-## 复现实验
+## 历史复现边界
 
-迁移后先按根目录交接文档修改数据集、仓库和 Conda 环境硬编码路径。确认 8 张 GPU 空闲后，从仓库根目录执行：
+该矩阵最初使用 8 张 GPU 分别运行 4 组 pretrained/scratch 配对实验。当前代码有意
+阻止加载预训练权重，并将可用 GPU 限制为 0、1、2，因此旧矩阵不再是可执行的当前
+训练入口。
+
+复核历史结果时应直接使用本发布集中的冻结源码、选中 checkpoint、训练日志、扫描
+JSON/CSV、提交 ZIP 和 SHA256；新实验则使用仓库根目录的 scratch-only 三卡流水线。
+发布集完整性可通过下列命令验证：
 
 ```bash
-conda activate sjyPID
-bash tools/launch_hybrid_rms_pretrain_ablation_8gpu.sh --dry-run
-bash tools/launch_hybrid_rms_pretrain_ablation_8gpu.sh
+sha256sum -c SHA256SUMS
 ```
-
-启动器使用 `screen` 创建 8 个独立会话，GPU 0/1、2/3、4/5、6/7 分别构成同结构的 pretrained/scratch 配对。默认使用 seed 47、SwanLab cloud 模式、Top-5 epoch 后处理和 `0.10:0.95:0.01` 阈值扫描。
 
 ## 未纳入 GitHub 的内容
 

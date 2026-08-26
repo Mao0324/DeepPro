@@ -1,7 +1,7 @@
-# 2026-08-24 网站结果分析与 Scratch-only 决策
+# 网站结果分析与 Scratch-only 决策（更新至 2026-08-26）
 
-> 分析日期：2026-08-25
-> 数据来源：比赛网站提交列表截图
+> 初次分析日期：2026-08-25；最近更新：2026-08-26
+> 数据来源：比赛网站提交列表截图和对应本地实验产物
 > 说明：截图最上方 `apmd_multiscale_contrast_seed49.zip`（87.32）是额外历史对照，
 > 不属于本轮 Hybrid-RMS 四结构 × 两初始化的 8 个严格配对实验。
 
@@ -80,3 +80,24 @@ scratch 主线是纯 `raw_apmd_hybrid_rms`，full 结构只能保留为消融证
 4. 新结构一律与同 seed、同训练预算的纯 Hybrid-RMS scratch 对照；
 5. 在没有 scratch 正收益前，不把 motion detrend 或 multiscale contrast 加回默认主线；
 6. 禁止通过 `base_ckpt`、TDCSTA branch checkpoint 或 launcher 初始化模式绕过策略。
+
+## 6. 2026-08-26 Scratch-init 新结果
+
+| 网站 ID | 本地对应提交文件 | 网站分数 | 本地选中结果 |
+|---:|---|---:|---|
+| 902114 | `submit_hrms_scratch_init_ddp3_seed47_best_proxy_f1.zip` | **86.45** | epoch 80，threshold 0.16，min_area 2，Proxy F1 0.771051 |
+
+本地选中结果的 Precision 为 `0.954120`，Recall 为 `0.646924`。与同 seed 的历史纯
+Hybrid-RMS scratch 基线相比：
+
+- 网站分数：`86.45 - 86.71 = -0.26`；
+- 本地 Proxy F1：`0.771051 - 0.774414 = -0.003363`。
+
+本地和网站方向一致，均不支持“只把全零 projection 改为 `0.05×Kaiming` 就能提升
+最终性能”的假设。该改动仍然解决了首个反向步骤中 adapter 上游梯度为零的机制问题，
+但机制正确不等于最终泛化更好，因此 `scratch_init` 不升级为新的成绩基线。当前网站
+scratch 基线仍为纯 Hybrid-RMS 的 `86.71`。
+
+`scratch_bandpass` 是在 scratch-init 上增加独立时域带通变量。它应继续完成，以
+`scratch_init` 判断 bandpass 的增量效应，并以 `86.71` 判断整个组合是否值得替换原
+Hybrid-RMS；只有同时看这两个对照，才不会把初始化的 `-0.26` 影响错误归因给带通模块。

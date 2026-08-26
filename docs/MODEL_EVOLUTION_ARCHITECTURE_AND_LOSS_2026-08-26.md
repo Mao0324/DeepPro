@@ -21,8 +21,8 @@
 model             = DeepPro-Plus_BRTD3
 base structure    = DeepPro-Plus 全分辨率差分主干 + TPro
 adapter family    = Raw-APMD Hybrid-RMS
-active variant    = raw_apmd_hybrid_rms_scratch_init
-next candidate    = raw_apmd_hybrid_rms_scratch_bandpass
+completed variant = raw_apmd_hybrid_rms_scratch_init (website 86.45)
+active variant    = raw_apmd_hybrid_rms_scratch_bandpass
 initialization    = scratch-only
 loss              = f1_calibrated_ohem
 valid-frame mask  = enabled
@@ -36,7 +36,8 @@ valid-frame mask  = enabled
 
 当前结构并不是历史网站最高分结构的简单复用，而是在 scratch-only 约束下重新解决优化
 问题：将适配器末端的全零投影改为 `0.05 × Kaiming` 小幅非零初始化，使适配器上游从
-第一个反向步骤就能获得梯度。
+第一个反向步骤就能获得梯度。该机制已通过梯度检查，但 standalone 网站结果为
+`86.45`，没有超过原 Hybrid-RMS 的 `86.71`；当前继续验证独立的 bandpass 增量。
 
 ---
 
@@ -314,8 +315,8 @@ Hybrid-RMS scratch 基线比较。
 
 | 变体 | 相对母体的唯一变化 | Adapter 参数 | 预期优点 | 主要风险 | 状态 |
 |---|---|---:|---|---|---|
-| `raw_apmd_hybrid_rms_scratch_init` | projection 改为 `0.05×Kaiming` | 2,496 | 解除首步梯度阻断 | 初始随机残差扰动 | 已训练，Top-5 后处理中 |
-| `raw_apmd_hybrid_rms_scratch_bandpass` | 再加入有效帧 3/9 帧均值之差 | 3,072 | 强化中等速度和中频弱目标 | 可能削弱极慢目标或放大闪烁 | 已排队，前一实验完成后启动 |
+| `raw_apmd_hybrid_rms_scratch_init` | projection 改为 `0.05×Kaiming` | 2,496 | 解除首步梯度阻断 | 初始随机残差扰动 | 已完成；网站 86.45，未超过基线 |
+| `raw_apmd_hybrid_rms_scratch_bandpass` | 再加入有效帧 3/9 帧均值之差 | 3,072 | 强化中等速度和中频弱目标 | 可能削弱极慢目标或放大闪烁 | GPU 0/1/2 运行中 |
 | `raw_apmd_hybrid_rms_scratch_detail` | 再加入主干 32→8 的 1×1 细节直连 | 3,344 | 补充差分主干细节，避免 raw 分支独占融合 | 可能重复引入杂波 | 已实现，尚未正式三卡训练 |
 
 Bandpass 定义为：
@@ -367,7 +368,8 @@ B_t = MaskedAvgPoolTemporal_3(A)_t - MaskedAvgPoolTemporal_9(A)_t
   假定其一定提高最终分数。
 - 像素 F1、质心 Proxy F1、网站 Score 和轨迹得分并不等价。
 - TPro 完整推理显存接近 24 GB；当前日志中 AMP + `eval_chunk_rows=32` 峰值约
-  `22.665 GiB`，继续增加宽度或高分辨率分支风险较高。
+  `22.665 GiB`，继续增加宽度或高分辨率分支风险较高。Raw-APMD 多域结构还必须使用
+  分域卷积求和的低显存验证路径，避免创建全尺寸 domain concat 临时张量。
 - Scratch-only 是研发约束而非性能最优证据；历史配对数据明确显示预训练更强。
 
 ---
@@ -562,17 +564,21 @@ Raw-APMD 的提升主要来自 Recall，同时 Precision 仍约为 0.93，因此
 从 scratch 默认主线移除。预训练组中两者共同启用存在正交互，但该结论不能直接迁移到
 当前 scratch-only 策略。
 
-### 8.5 当前 scratch-init 的阶段性结果
+### 8.5 Scratch-init 的最终结果
 
 `raw_apmd_hybrid_rms_scratch_init` 已完成 100 epoch：
 
 - pixel F1 最优为 `0.520041`，epoch 80；
-- epoch 80 当前质心扫描结果为 Precision `0.954120`、Recall `0.646924`、
+- epoch 80 质心扫描结果为 Precision `0.954120`、Recall `0.646924`、
   Proxy F1 `0.771051`，阈值 `0.16`、`min_area=2`；
-- Top-5 checkpoint 为 epoch `80 / 95 / 85 / 60 / 70`，其余候选仍需完成质心扫描后
-  才能给出该实验最终 Proxy F1；
-- 历史 Hybrid-RMS scratch 基线为 `0.774414`，因此不能仅凭 epoch 80 宣布新初始化
-  已提升，也不能在 Top-5 未结束时宣布失败。
+- Top-5 checkpoint 为 epoch `80 / 95 / 85 / 60 / 70`，完整扫描最终仍选择 epoch 80；
+- 已生成并校验 `submit_hrms_scratch_init_ddp3_seed47_best_proxy_f1.zip`；
+- 网站提交 ID `902114` 得分 `86.45`，比历史 Hybrid-RMS scratch `86.71` 低 `0.26`；
+- 本地 Proxy F1 同样比历史 `0.774414` 低 `0.003363`，本地与网站方向一致。
+
+结论是：小幅非零 projection 解决了首步上游梯度阻断，但没有单独带来更好的最终性能，
+因此不能替换原 Hybrid-RMS 成绩基线。正在运行的 bandpass 必须同时超过 scratch-init
+才能证明模块增量有效，并超过 `86.71` 才能证明整个组合值得采用。
 
 ---
 
@@ -627,8 +633,9 @@ Raw-APMD 的提升主要来自 Recall，同时 Precision 仍约为 0.93，因此
 
 ## 11. 推荐的后续决策顺序
 
-1. 完成 scratch-init 的 Top-5 质心扫描并生成已验证 ZIP。
-2. 运行 bandpass 三卡实验；只比较同 seed、同训练预算下的 Proxy F1、Precision、Recall。
+1. Scratch-init 的 Top-5、ZIP 和网站验证均已完成，结果 `86.45`，不升级为新基线。
+2. 完成正在 GPU 0/1/2 上运行的 bandpass 实验；比较同 seed、同训练预算下的 Proxy
+   F1、Precision、Recall，并分别对照 scratch-init 与原 Hybrid-RMS。
 3. 如果 bandpass 未超过历史 scratch Hybrid-RMS `0.774414`，再运行 detail，而不是把
    已有 scratch 负收益的 motion detrend/multiscale contrast 叠加回来。
 4. 只有新结构明显提升且 Precision 未明显下降，才提交网站并补 seed 49。
@@ -647,8 +654,9 @@ Raw-APMD 的提升主要来自 Recall，同时 Precision 仍约为 0.93，因此
 3. 从 GroupNorm、共享 RMS、Channel-RMS 的二选一，转向 Hybrid-RMS 的可学习能量收缩，
    在绝对亮度保存和跨 seed 稳定性之间折中。
 
-当前 scratch-only 阶段进一步发现：预训练场景下安全的全零 residual projection 不一定
-适合随机初始化训练，因此先验证小幅非零投影，再按单变量顺序验证 bandpass 和 detail。
+当前 scratch-only 阶段进一步发现：小幅非零 residual projection 能解除首步梯度阻断，
+但其单独网站得分 `86.45` 低于全零 Hybrid-RMS 的 `86.71`，说明优化机制修复不能直接
+等同于泛化提升。后续继续按单变量顺序验证 bandpass 和 detail。
 损失暂时固定为 F1-Calibrated OHEM，以确保结构实验可归因；它在类别不平衡和低虚警上
 较稳健，但仍不能替代质心/轨迹后处理和网站验证，也可能需要在模型稳定后针对 Recall
 重新调整。

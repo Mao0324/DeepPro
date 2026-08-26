@@ -344,6 +344,11 @@ class RawAppearanceMotionAdapter(nn.Module):
             raise ValueError('projection_init_scale must be non-negative')
         self.temporal_bandpass = bool(temporal_bandpass)
         self.backbone_detail = bool(backbone_detail)
+        # The model enables this only for chunked evaluation.  Training keeps
+        # the ordinary concatenated convolution so its computation graph is
+        # unchanged, while full-frame inference can avoid a very large
+        # temporary [B, domain_count*C, T, H, W] tensor.
+        self.low_memory_eval = False
         self.motion_detrend_kernel = 15
         self.contrast_kernel_sizes = (3, 5, 7)
         self.temporal_bandpass_kernels = (3, 9)
@@ -438,6 +443,41 @@ class RawAppearanceMotionAdapter(nn.Module):
             self.projection_init_scale,
         )
 
+    def _fuse_domains(self, domains):
+        if self.training or not self.low_memory_eval:
+            return self.domain_fusion(torch.cat(domains, dim=1))
+
+        convolution, normalization, activation = self.domain_fusion
+        if convolution.groups != 1 or convolution.bias is not None:
+            raise RuntimeError(
+                'low-memory domain fusion requires an ungrouped bias-free '
+                'convolution'
+            )
+        channel_offset = 0
+        fused = None
+        for domain in domains:
+            next_offset = channel_offset + domain.shape[1]
+            response = F.conv3d(
+                domain,
+                convolution.weight[:, channel_offset:next_offset],
+                bias=None,
+                stride=convolution.stride,
+                padding=convolution.padding,
+                dilation=convolution.dilation,
+                groups=1,
+            )
+            if fused is None:
+                fused = response
+            else:
+                fused.add_(response)
+            channel_offset = next_offset
+        if channel_offset != convolution.in_channels:
+            raise RuntimeError(
+                'domain channels total %d, expected %d'
+                % (channel_offset, convolution.in_channels)
+            )
+        return activation(normalization(fused))
+
     @staticmethod
     def _channel_scale_weights(logits):
         return torch.softmax(logits, dim=0).view(
@@ -524,6 +564,12 @@ class RawAppearanceMotionAdapter(nn.Module):
         motion = self.motion_fusion(torch.cat([
             first_context, second_context
         ], dim=1)) * valid
+        if not return_aux:
+            # Python otherwise retains the final loop temporaries until the
+            # function returns.  Each is a full-resolution 5D tensor and the
+            # combined retention is enough to OOM 24 GB validation devices.
+            del previous, following, first_order, second_order
+            del first_context, second_context
         contrast_weights = None
         if self.adaptive_contrast:
             contrast, contrast_weights = self._adaptive_local_contrast(
@@ -543,6 +589,8 @@ class RawAppearanceMotionAdapter(nn.Module):
                 appearance, valid_mask, long_kernel
             )
             temporal_bandpass = (short_context - long_context) * valid
+            if not return_aux:
+                del short_context, long_context
             domains.append(temporal_bandpass)
         backbone_detail = None
         if self.backbone_detail:
@@ -550,7 +598,7 @@ class RawAppearanceMotionAdapter(nn.Module):
                 backbone_features * valid
             ) * valid
             domains.append(backbone_detail)
-        fused = self.domain_fusion(torch.cat(domains, dim=1)) * valid
+        fused = self._fuse_domains(domains) * valid
         delta = self.projection(fused)
         output = backbone_features + delta
         if not return_aux:
