@@ -97,8 +97,8 @@ flowchart LR
 - 序列/patch：`40 / 128`；全局 batch `24`（每卡 `8`）；历史 40 帧实验使用
   global batch `18/20`，本轮只做适度扩大；
 - Adam，学习率 `1e-3`；训练网络前反向使用 AMP，F1 loss 与困难样本排序保持 FP32；
-  为补偿 batch24 每轮更新数下降，最多 `130` epoch、每 `13` epoch 衰减 LR、
-  hard-OHEM warm-up/ramp 为 `7/13` epoch，early stopping 从 epoch `27` 开始；
+  当前正式任务保持启动时的 `100 epoch / step_size 10`、hard-OHEM
+  warm-up/ramp `5/10`、early stopping 从 epoch `20` 开始；
   5 epoch 一次三卡分片验证；
 - SwanLab cloud 全程记录；Top-5 checkpoint 逐个导出、质心阈值扫描、轨迹化；
 - 最终 ZIP 必须通过结构/帧数校验并生成 SHA256。
@@ -109,6 +109,11 @@ flowchart LR
 - 实验目录：`2026-08-27/SatVideoIRSDT_v1__2026-08-27_03-23-00__FeedbackSTS-F1-feedbacksts_l40_t2_recallaug_ddp3_seed47_E100`；
 - [SwanLab run](https://swanlab.cn/@SInt123/CSIG2026-DeepPro/runs/78j2ga6249hmwbzqsdzhq)；
 - 预期提交包：`submission/submit_feedbacksts_l40_t2_recallaug_ddp3_seed47_best_proxy_f1.zip`。
+
+15:11 曾考虑在 checkpoint 处切换为更新次数等价的 `130 / 13` 调度，但停止权限未获批，
+且连续收敛证据优先，因此该方案已取消。当前进程不暂停；专用恢复脚本也保持原
+`100 / 10 / 5 / 10` 调度，避免意外恢复时改变实验定义。更新次数等价方案只可作为
+未来独立候选，不能混入本 run。
 
 当前 DataLoader 实测为 3850 个 40 帧滑窗，batch 24 时为 160 step/epoch；显存约
 `15.0 GiB allocated / 15.75 GiB reserved`。训练 AMP 的三步测试不存在非有限 loss/梯度，
