@@ -8,6 +8,7 @@
 
 | 文档 | 内容 | 状态 |
 |---|---|---|
+| [F1 最大化研究与 FeedbackSTS 决策](F1_MAXIMIZATION_RESEARCH_2026-08-27.md) | 86.47 复盘、候选路线对比、新网络/损失/验收与实验判据 | 当前优先实验 |
 | [模型演进、当前框架与损失](MODEL_EVOLUTION_ARCHITECTURE_AND_LOSS_2026-08-26.md) | 从 DeepPro 到当前 BRTD3/Raw-APMD 的结构、框架图、模块增删、优缺点和损失公式 | 当前总览 |
 | [Scratch-only 模型改进](../SCRATCH_MODEL_IMPROVEMENT_2026-08-25.md) | 非零投影、bandpass、detail 三候选的设计与验收 | 当前实验依据 |
 | [网站结果分析](../WEBSITE_RESULTS_ANALYSIS_2026-08-25.md) | 八个历史配对结果、scratch-init 结果及 scratch-only 决策 | 当前策略依据 |
@@ -18,7 +19,7 @@
 - 新训练只能随机初始化；`base_ckpt`、`spatial_ckpt`、`st_ckpt` 均被拒绝；
 - 只允许物理 GPU 0、1、2，GPU3 不进入训练或后处理任务；
 - 三张卡一次训练一个网络；
-- 正式结构实验固定 `f1_calibrated_ohem`，避免结构与损失同时变化；
+- 当前 FeedbackSTS 优先实验使用有记录的 recall-oriented `f1_calibrated_ohem`；
 - 训练结束必须完成 Top-5、质心阈值扫描、轨迹生成、ZIP 校验和 SHA256；
 - SwanLab 云端异常不能使已经完成的本地训练失效。
 

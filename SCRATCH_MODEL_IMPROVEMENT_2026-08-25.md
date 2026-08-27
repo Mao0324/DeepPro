@@ -11,12 +11,12 @@ contrast，而是以网站 scratch 最优的 `raw_apmd_hybrid_rms` 为唯一母�
 2. 本地 Proxy 指标呈现高精度、低召回，主要矛盾是漏检微弱目标，而不是虚警过多。
 
 据此生成三个轻量候选，并按单变量顺序将 GPU 0/1/2 组成一个 DDP 任务逐个训练。
-候选 1 已完成，候选 2 正在运行，候选 3 保留代码、暂不占用 GPU：
+候选 1、2 已完成，候选 3 保留代码但不再进入优先队列：
 
 | 序号 | 结构变量 | 变体 | 适配器参数量 | 状态 |
 |---:|---|---|---:|---|
 | 0 | 仅将零投影改成 0.05 倍 Kaiming 非零初始化 | `raw_apmd_hybrid_rms_scratch_init` | 2,496 | 已完成；网站 86.45 |
-| 1 | 候选 1 + 有效帧掩码的 3/9 帧时域带通 | `raw_apmd_hybrid_rms_scratch_bandpass` | 3,072 | GPU 0/1/2 运行中 |
+| 1 | 候选 1 + 有效帧掩码的 3/9 帧时域带通 | `raw_apmd_hybrid_rms_scratch_bandpass` | 3,072 | 已完成；网站 86.47 |
 | 2 | 候选 1 + 1×1 主干细节直连融合 | `raw_apmd_hybrid_rms_scratch_detail` | 3,344 | 已实现，待判定是否训练 |
 
 候选 1 与历史 Hybrid-RMS 对照可归因于初始化；候选 2、3 分别只比候选 1 多一个模块。
@@ -123,7 +123,7 @@ ZIP 与 SHA256。网站提交 ID `902114` 得分 `86.45`，比历史 Hybrid-RMS 
 模型和早停状态从 epoch 6 恢复；SwanLab 继续使用同一 run ID。当时预计剩余训练与
 定期验证约 8–10 小时，训练结束后的候选复评与 ZIP 流程保持不变，现已全部完成。
 
-### 正在运行：Scratch-bandpass
+### 已完成：Scratch-bandpass
 
 - 结构：`raw_apmd_hybrid_rms_scratch_bandpass`；
 - GPU：物理 `0,1,2`，一个 DDP 网络；seed 47；
@@ -136,15 +136,18 @@ ZIP 与 SHA256。网站提交 ID `902114` 得分 `86.45`，比历史 Hybrid-RMS 
 - 2026-08-26 12:35 从 epoch 4 checkpoint 恢复，并续接同一 SwanLab run；
 - 12:45 三张卡的 255 个验证序列全部完成，epoch 5 Eval F1 为 `0.043113`，checkpoint
   正常保存并进入 epoch 6，确认低显存验证修复在真实大尺寸序列上生效。
+- 最终选择 epoch 80、threshold `0.10`、`min_area=2`，Proxy Precision
+  `0.943955`、Recall `0.653164`、F1 `0.772087`；
+- 网站提交 ID `903589` 得分 `86.47`：仅比 scratch-init 高 `0.02`，仍比历史
+  Hybrid-RMS scratch `86.71` 低 `0.24`，因此不采纳为新基线。
 
 ## 局限与下一步判据
 
-Scratch-init 已有网站结果 `86.45`，低于基线 `86.71`；其余新候选尚无网站结果，
-不能把结构动机写成性能提升结论。历史网站结果也主要是单 seed 证据。bandpass 应同时
-与 scratch-init 比较模块增量、与原 Hybrid-RMS 比较总体收益。只有显著优于历史本地
-`0.774414` 且 precision 没有不可接受下降的候选才提交网站；胜者再补 seed 49 复验。
-若三个候选都不胜，下一步应优先做学习率/训练时长控制实验，而不是把已负收益的去趋势
-和多尺度空间对比重新叠加。
+Scratch-init 和 bandpass 的网站结果分别为 `86.45`、`86.47`，都低于 `86.71` 基线。
+这说明继续围绕 Raw-APMD 做同类轻量增量的预期收益较低。下一轮不训练 detail，而是
+转向独立的 FeedbackSTS 风格双向时空反馈网络，并同时把损失从偏抑制 FP 改为偏恢复
+Recall；完整论证和验收见 `docs/F1_MAXIMIZATION_RESEARCH_2026-08-27.md`。新候选只有
+在本地 Proxy F1 超过 `0.774414` 后才进入网站提交，网站超过 `86.71` 后才升级基线。
 
 ## AI 使用披露
 

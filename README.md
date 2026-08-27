@@ -8,18 +8,18 @@
 
 ## CSIG2026 Development Status
 
-The current model family is `DeepPro-Plus_BRTD3` with a Raw-APMD Hybrid-RMS
-adapter. It keeps the full-resolution DeepPro-Plus difference backbone and
-TPro, while adding a raw-frame appearance path, multi-scale first/second-order
-motion, local contrast, valid-frame masking, and a lightweight residual
-projection.
+The current priority candidate is the scratch-only `DeepPro-FeedbackSTS`: a
+five-level 3D U-Net with fixed-interval forward encoder propagation, backward
+decoder propagation, and pyramid deformable alignment. The earlier
+`DeepPro-Plus_BRTD3` / Raw-APMD family remains the audited score baseline.
 
 | Item | Current setting |
 |---|---|
 | Dataset | `SatVideoIRSDT_v1` (stored outside this repository) |
-| Main model | `DeepPro-Plus_BRTD3` |
-| Completed scratch reference | `raw_apmd_hybrid_rms_scratch_init`: website `86.45` |
-| Active structural candidate | `raw_apmd_hybrid_rms_scratch_bandpass` |
+| Main candidate | `DeepPro-FeedbackSTS` |
+| Scratch website baseline | `raw_apmd_hybrid_rms`: `86.71` |
+| Completed recent runs | scratch-init `86.45`; bandpass `86.47` |
+| Active structural candidate | FeedbackSTS T=2 + recall-oriented loss + sequence augmentation |
 | Initialization | Random weights only; pretrained initialization is forbidden |
 | Loss | `f1_calibrated_ohem` with valid-frame masking |
 | Training devices | One DDP job on physical GPUs `0,1,2` |
@@ -29,6 +29,7 @@ projection.
 Start with these documents before running or changing an experiment:
 
 - [Model evolution, current architecture, and loss](docs/MODEL_EVOLUTION_ARCHITECTURE_AND_LOSS_2026-08-26.md)
+- [F1-maximization research and FeedbackSTS decision](docs/F1_MAXIMIZATION_RESEARCH_2026-08-27.md)
 - [Documentation index](docs/README.md)
 - [Scratch-only model improvement record](SCRATCH_MODEL_IMPROVEMENT_2026-08-25.md)
 - [Website result analysis](WEBSITE_RESULTS_ANALYSIS_2026-08-25.md)
@@ -39,11 +40,11 @@ The principal implementation files are:
 ```text
 train.py                                      unified scratch-only DDP training
 test.py                                       AMP/chunked probability export
-networks/models/DeepPro-Plus_BRTD3.py         current model container
-networks/layers/structure_adapters.py         Raw-APMD and structural variants
+networks/models/DeepPro-FeedbackSTS.py        priority model container
+networks/layers/feedback_sts.py               feedback/alignment backbone
 networks/losses/segmentation_losses.py        selectable segmentation losses
 tools/project_runtime_env.sh                  paths and GPU allowlist
-tools/run_structure_candidate_experiment.sh  train-to-submission pipeline
+tools/run_feedbacksts_f1_experiment.sh        train-to-submission pipeline
 ```
 
 Generated experiments, probability images, SwanLab caches, and submission

@@ -7,7 +7,8 @@
 
 ## 1. 文档目的与结论摘要
 
-本文统一说明从原始 DeepPro 到当前 scratch-only BRTD3 主线的结构演进，包括：
+本文统一说明从原始 DeepPro 到 scratch-only BRTD3，并记录 2026-08-27 转向
+FeedbackSTS 优先候选前的结构演进，包括：
 
 - 每一代模型增加、删除或移动了哪些模块；
 - 各模块解决什么问题，以及实验暴露出的优缺点；
@@ -18,13 +19,13 @@
 当前模型主线是：
 
 ```text
-model             = DeepPro-Plus_BRTD3
-base structure    = DeepPro-Plus 全分辨率差分主干 + TPro
-adapter family    = Raw-APMD Hybrid-RMS
-completed variant = raw_apmd_hybrid_rms_scratch_init (website 86.45)
-active variant    = raw_apmd_hybrid_rms_scratch_bandpass
+model             = DeepPro-FeedbackSTS
+base structure    = 五级 3D U-Net + 双向稀疏语义反馈 + 金字塔形变对齐
+historical base   = raw_apmd_hybrid_rms scratch (website 86.71)
+completed variants= scratch-init 86.45; scratch-bandpass 86.47
+active variant    = feedbacksts_t2_recallaug_ddp3_seed47
 initialization    = scratch-only
-loss              = f1_calibrated_ohem
+loss              = recall-oriented f1_calibrated_ohem
 valid-frame mask  = enabled
 ```
 
@@ -37,7 +38,8 @@ valid-frame mask  = enabled
 当前结构并不是历史网站最高分结构的简单复用，而是在 scratch-only 约束下重新解决优化
 问题：将适配器末端的全零投影改为 `0.05 × Kaiming` 小幅非零初始化，使适配器上游从
 第一个反向步骤就能获得梯度。该机制已通过梯度检查，但 standalone 网站结果为
-`86.45`，没有超过原 Hybrid-RMS 的 `86.71`；当前继续验证独立的 bandpass 增量。
+`86.45`，没有超过原 Hybrid-RMS 的 `86.71`；bandpass 最终也只有 `86.47`。当前转向
+独立的 FeedbackSTS 风格网络，完整依据见 `F1_MAXIMIZATION_RESEARCH_2026-08-27.md`。
 
 ---
 
@@ -84,6 +86,7 @@ flowchart LR
 | 2026-08-17 | `c1d8ba3` | Raw-APMD 原始外观/运动/对比分支 | 当前结构母体 |
 | 2026-08-20~23 | 迁移工作树，后由 `268838b` 打包 | RMS、Channel-RMS、Hybrid-RMS、motion detrend、multiscale contrast | 历史主线与消融 |
 | 2026-08-25 | `e5bdbdf` | scratch-only、三卡 DDP、非零投影、bandpass/detail 候选 | 当前研发主线 |
+| 2026-08-27 | 待本轮提交 | FeedbackSTS 双向语义反馈、形变对齐、召回导向损失 | 当前优先候选 |
 | 2026-08-26 | `f8fe6d6` | SwanLab 收尾失败不再阻断本地后处理和 ZIP | 工程可靠性修复 |
 
 ---
@@ -316,7 +319,7 @@ Hybrid-RMS scratch 基线比较。
 | 变体 | 相对母体的唯一变化 | Adapter 参数 | 预期优点 | 主要风险 | 状态 |
 |---|---|---:|---|---|---|
 | `raw_apmd_hybrid_rms_scratch_init` | projection 改为 `0.05×Kaiming` | 2,496 | 解除首步梯度阻断 | 初始随机残差扰动 | 已完成；网站 86.45，未超过基线 |
-| `raw_apmd_hybrid_rms_scratch_bandpass` | 再加入有效帧 3/9 帧均值之差 | 3,072 | 强化中等速度和中频弱目标 | 可能削弱极慢目标或放大闪烁 | GPU 0/1/2 运行中 |
+| `raw_apmd_hybrid_rms_scratch_bandpass` | 再加入有效帧 3/9 帧均值之差 | 3,072 | 强化中等速度和中频弱目标 | 可能削弱极慢目标或放大闪烁 | 已完成；网站 86.47，未超过基线 |
 | `raw_apmd_hybrid_rms_scratch_detail` | 再加入主干 32→8 的 1×1 细节直连 | 3,344 | 补充差分主干细节，避免 raw 分支独占融合 | 可能重复引入杂波 | 已实现，尚未正式三卡训练 |
 
 Bandpass 定义为：
@@ -577,8 +580,8 @@ Raw-APMD 的提升主要来自 Recall，同时 Precision 仍约为 0.93，因此
 - 本地 Proxy F1 同样比历史 `0.774414` 低 `0.003363`，本地与网站方向一致。
 
 结论是：小幅非零 projection 解决了首步上游梯度阻断，但没有单独带来更好的最终性能，
-因此不能替换原 Hybrid-RMS 成绩基线。正在运行的 bandpass 必须同时超过 scratch-init
-才能证明模块增量有效，并超过 `86.71` 才能证明整个组合值得采用。
+因此不能替换原 Hybrid-RMS 成绩基线。bandpass 最终网站 `86.47`，虽比 scratch-init
+高 `0.02`，仍低于 `86.71`，所以也不能证明整个组合值得采用。
 
 ---
 
@@ -633,15 +636,13 @@ Raw-APMD 的提升主要来自 Recall，同时 Precision 仍约为 0.93，因此
 
 ## 11. 推荐的后续决策顺序
 
-1. Scratch-init 的 Top-5、ZIP 和网站验证均已完成，结果 `86.45`，不升级为新基线。
-2. 完成正在 GPU 0/1/2 上运行的 bandpass 实验；比较同 seed、同训练预算下的 Proxy
-   F1、Precision、Recall，并分别对照 scratch-init 与原 Hybrid-RMS。
-3. 如果 bandpass 未超过历史 scratch Hybrid-RMS `0.774414`，再运行 detail，而不是把
-   已有 scratch 负收益的 motion detrend/multiscale contrast 叠加回来。
-4. 只有新结构明显提升且 Precision 未明显下降，才提交网站并补 seed 49。
-5. 结构确定后，再单独做 loss 消融；第一优先级是改善困难正样本和 Recall，不应继续
-   单方面加强困难负样本惩罚。
-6. 所有实验继续遵守 scratch-only、GPU 0/1/2、SwanLab 和自动 ZIP 验证规则。
+1. Scratch-init、bandpass 均已完成，网站 `86.45 / 86.47`，都不升级为新基线。
+2. 首先运行 FeedbackSTS T=2 双向反馈网络和 recall-oriented loss；不继续训练 detail。
+3. 本地 Proxy F1 超过 `0.774414` 后才提交网站，网站超过 `86.71` 后才升级基线。
+4. 若首轮失败，固定 FeedbackSTS 分别恢复旧损失、增加中心高斯辅助头，定位结构与损失
+   的贡献，而不回到已负收益的 motion detrend/multiscale contrast。
+5. 单 seed 胜出后补 seed 49；所有实验继续遵守 scratch-only、GPU 0/1/2、SwanLab
+   和自动 ZIP 验证规则。
 
 ---
 
@@ -655,8 +656,7 @@ Raw-APMD 的提升主要来自 Recall，同时 Precision 仍约为 0.93，因此
    在绝对亮度保存和跨 seed 稳定性之间折中。
 
 当前 scratch-only 阶段进一步发现：小幅非零 residual projection 能解除首步梯度阻断，
-但其单独网站得分 `86.45` 低于全零 Hybrid-RMS 的 `86.71`，说明优化机制修复不能直接
-等同于泛化提升。后续继续按单变量顺序验证 bandpass 和 detail。
-损失暂时固定为 F1-Calibrated OHEM，以确保结构实验可归因；它在类别不平衡和低虚警上
-较稳健，但仍不能替代质心/轨迹后处理和网站验证，也可能需要在模型稳定后针对 Recall
-重新调整。
+但 scratch-init/bandpass 的 `86.45 / 86.47` 都低于 `86.71`，说明优化机制修复和微小
+结构增量不能直接等同于泛化提升。当前已转向多尺度、显式对齐、双向反馈的完整网络，
+并依据 FN 主导的误差结构调整 F1-Calibrated OHEM。最终仍以本地质心代理和网站结果
+共同验证，不把结构动机写成已实现的性能提升。

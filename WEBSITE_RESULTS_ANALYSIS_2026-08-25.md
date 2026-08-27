@@ -1,6 +1,6 @@
-# 网站结果分析与 Scratch-only 决策（更新至 2026-08-26）
+# 网站结果分析与 Scratch-only 决策（更新至 2026-08-27）
 
-> 初次分析日期：2026-08-25；最近更新：2026-08-26
+> 初次分析日期：2026-08-25；最近更新：2026-08-27
 > 数据来源：比赛网站提交列表截图和对应本地实验产物
 > 说明：截图最上方 `apmd_multiscale_contrast_seed49.zip`（87.32）是额外历史对照，
 > 不属于本轮 Hybrid-RMS 四结构 × 两初始化的 8 个严格配对实验。
@@ -101,3 +101,19 @@ scratch 基线仍为纯 Hybrid-RMS 的 `86.71`。
 `scratch_bandpass` 是在 scratch-init 上增加独立时域带通变量。它应继续完成，以
 `scratch_init` 判断 bandpass 的增量效应，并以 `86.71` 判断整个组合是否值得替换原
 Hybrid-RMS；只有同时看这两个对照，才不会把初始化的 `-0.26` 影响错误归因给带通模块。
+
+## 7. 2026-08-27 Scratch-bandpass 最终结果
+
+| 网站 ID | 本地对应提交文件 | 网站分数 | 本地选中结果 |
+|---:|---|---:|---|
+| 903589 | `submit_hrms_scratch_bandpass_ddp3_seed47_best_proxy_f1.zip` | **86.47** | epoch 80，threshold 0.10，min_area 2，Proxy F1 0.772087 |
+
+本地选中结果的 Precision 为 `0.943955`，Recall 为 `0.653164`。其相对关系为：
+
+- 相比 scratch-init：网站 `+0.02`，本地 Proxy F1 `+0.001036`；
+- 相比历史 Hybrid-RMS scratch：网站 `-0.24`，本地 Proxy F1 `-0.002327`；
+- 误差组成：FP `3,412`，FN `30,516`，漏检占 FP+FN 的 `89.95%`。
+
+因此 bandpass 有很弱的同母体正增量，但不足以抵消 scratch-init 的退化，也不能升级为
+新基线。Raw-APMD 系列继续做小模块叠加的边际收益已经很低，下一轮改为独立的
+FeedbackSTS 风格时空反馈网络；新网络仍从随机权重训练，并以 `86.71` 为网站晋级线。

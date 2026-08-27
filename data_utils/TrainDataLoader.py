@@ -20,6 +20,25 @@ NEAREST_RESAMPLE = (
 )
 
 
+class SequenceGeometryAugmentation:
+    """Apply label-preserving spatial symmetries and temporal reversal."""
+
+    def __call__(self, images, labels):
+        if random.random() < 0.5:
+            images = images[..., ::-1, :]
+            labels = labels[..., ::-1, :]
+        if random.random() < 0.5:
+            images = images[..., ::-1]
+            labels = labels[..., ::-1]
+        if random.random() < 0.5:
+            images = images.swapaxes(-2, -1)
+            labels = labels.swapaxes(-2, -1)
+        if random.random() < 0.5:
+            images = images[:, ::-1]
+            labels = labels[::-1]
+        return np.ascontiguousarray(images), np.ascontiguousarray(labels)
+
+
 class LazySequenceWindow:
     """Store a temporal window without duplicating every frame path."""
 
@@ -208,8 +227,8 @@ class TrainSeqDataLoader(Dataset):
             images = images[:, :, r0:r0+self.patch_size, c0:c0+self.patch_size]
             labels = labels[:, r0:r0+self.patch_size, c0:c0+self.patch_size]
 
-        # if self.transform is not None:
-        #     sample = self.transform(sample)   #########################
+        if self.transform is not None:
+            images, labels = self.transform(images, labels)
 
         images = torch.from_numpy(images)
         labels = torch.from_numpy(labels)

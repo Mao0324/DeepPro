@@ -757,6 +757,9 @@ def _validate_parameters(
     hard_focal_weight, sls_location_weight, sls_warmup_epochs,
     tda_weight, tda_mean_size, tda_mean_contrast, tda_dilation,
     stc_center_weight, stc_temporal_weight, stc_warmup_epochs,
+    f1_ohem_dice_weight, f1_ohem_hard_weight,
+    f1_ohem_negative_ratio, f1_ohem_min_negatives,
+    f1_ohem_margin, f1_ohem_warmup_epochs, f1_ohem_ramp_epochs,
 ):
     if name not in LOSS_NAMES:
         raise ValueError(
@@ -780,6 +783,21 @@ def _validate_parameters(
         raise ValueError('Combined-loss weights must be non-negative.')
     if stc_center_weight < 0.0 or stc_temporal_weight < 0.0:
         raise ValueError('STC weights must be non-negative.')
+    if name == 'f1_calibrated_ohem':
+        if f1_ohem_dice_weight < 0.0 or f1_ohem_hard_weight < 0.0:
+            raise ValueError('F1 OHEM component weights must be non-negative.')
+        if f1_ohem_negative_ratio <= 0.0:
+            raise ValueError('F1 OHEM negative ratio must be positive.')
+        if f1_ohem_min_negatives <= 0:
+            raise ValueError('F1 OHEM minimum negatives must be positive.')
+        if f1_ohem_min_negatives > hard_negative_topk:
+            raise ValueError(
+                'F1 OHEM minimum negatives cannot exceed hard_negative_topk.'
+            )
+        if f1_ohem_margin < 0.0:
+            raise ValueError('F1 OHEM margin must be non-negative.')
+        if f1_ohem_warmup_epochs < 0 or f1_ohem_ramp_epochs <= 0:
+            raise ValueError('F1 OHEM warm-up/ramp settings are invalid.')
     if sls_warmup_epochs < 0 or stc_warmup_epochs < 0:
         raise ValueError('Warm-up epochs must be non-negative.')
     if tda_mean_size < 0.0 or tda_mean_contrast < 0.0:
@@ -809,6 +827,13 @@ def build_segmentation_loss(
     stc_center_weight=0.1,
     stc_temporal_weight=0.05,
     stc_warmup_epochs=5,
+    f1_ohem_dice_weight=0.15,
+    f1_ohem_hard_weight=0.10,
+    f1_ohem_negative_ratio=4.0,
+    f1_ohem_min_negatives=256,
+    f1_ohem_margin=1.0,
+    f1_ohem_warmup_epochs=5,
+    f1_ohem_ramp_epochs=10,
 ):
     """Build one of the command-line selectable losses."""
     _validate_parameters(
@@ -817,6 +842,9 @@ def build_segmentation_loss(
         hard_focal_weight, sls_location_weight, sls_warmup_epochs,
         tda_weight, tda_mean_size, tda_mean_contrast, tda_dilation,
         stc_center_weight, stc_temporal_weight, stc_warmup_epochs,
+        f1_ohem_dice_weight, f1_ohem_hard_weight,
+        f1_ohem_negative_ratio, f1_ohem_min_negatives,
+        f1_ohem_margin, f1_ohem_warmup_epochs, f1_ohem_ramp_epochs,
     )
     if name == 'soft_iou':
         return LegacySoftIoULoss()
@@ -861,6 +889,13 @@ def build_segmentation_loss(
     if name == 'f1_calibrated_ohem':
         return F1CalibratedOHEMLoss(
             tversky_fp_weight, tversky_fn_weight, eps,
+            dice_weight=f1_ohem_dice_weight,
+            hard_weight=f1_ohem_hard_weight,
+            negative_ratio=f1_ohem_negative_ratio,
+            min_negatives=f1_ohem_min_negatives,
             max_negatives=hard_negative_topk,
+            margin=f1_ohem_margin,
+            warmup_epochs=f1_ohem_warmup_epochs,
+            ramp_epochs=f1_ohem_ramp_epochs,
         )
     raise AssertionError('unreachable loss selection: %s' % name)

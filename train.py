@@ -7,7 +7,10 @@ from contextlib import nullcontext
 import gc
 import inspect
 import os
-from data_utils.TrainDataLoader import TrainIRSeqDataLoader
+from data_utils.TrainDataLoader import (
+    SequenceGeometryAugmentation,
+    TrainIRSeqDataLoader,
+)
 from data_utils.TestDataLoader import TestIRSeqDataLoader
 from networks.losses import (
     LOSS_DESCRIPTIONS,
@@ -106,6 +109,15 @@ def model_configuration(model_module, args):
         'structure_max_shift': args.structure_max_shift,
     }
     for name, value in structure_options.items():
+        if name in parameters:
+            configuration[name] = value
+    feedback_options = {
+        'feedback_interval': args.feedback_interval,
+        'feedback_alignment_levels': args.feedback_alignment_levels,
+        'feedback_eval_tile_size': args.feedback_eval_tile_size,
+        'feedback_eval_tile_overlap': args.feedback_eval_tile_overlap,
+    }
+    for name, value in feedback_options.items():
         if name in parameters:
             configuration[name] = value
     return configuration
@@ -355,6 +367,10 @@ def parse_args():
     parser.add_argument('--sample_rate', type=float, default=0.1, help='Sampling rate for training [default: 0.1(NUDT-MIRSDT), '
                                                                      '0.03(IRDST), 0.05(RGB-T), 0.04(SatVideoIRSDT)]')
     parser.add_argument(
+        '--sequence_augmentation', type=int, default=0, choices=[0, 1],
+        help='Enable spatial symmetry and temporal reversal augmentation.',
+    )
+    parser.add_argument(
         '--mask_padded_frames', type=int, default=0, choices=[0, 1],
         help='Exclude synthetic all-zero sequence-padding frames '
              'from training loss and metrics (F1-OHEM only).',
@@ -410,6 +426,13 @@ def parse_args():
                         help='Hard background pixels retained per video clip [default: 4096]')
     parser.add_argument('--hard_focal_weight', type=float, default=0.25,
                         help='Hard-Focal coefficient in combined losses [default: 0.25]')
+    parser.add_argument('--f1_ohem_dice_weight', type=float, default=0.15)
+    parser.add_argument('--f1_ohem_hard_weight', type=float, default=0.10)
+    parser.add_argument('--f1_ohem_negative_ratio', type=float, default=4.0)
+    parser.add_argument('--f1_ohem_min_negatives', type=int, default=256)
+    parser.add_argument('--f1_ohem_margin', type=float, default=1.0)
+    parser.add_argument('--f1_ohem_warmup_epochs', type=int, default=5)
+    parser.add_argument('--f1_ohem_ramp_epochs', type=int, default=10)
     parser.add_argument('--sls_location_weight', type=float, default=1.0,
                         help='Location coefficient in SLS/TDA [default: 1.0]')
     parser.add_argument('--sls_warmup_epochs', type=int, default=5,
@@ -508,6 +531,10 @@ def parse_args():
         '--structure_max_shift', type=float, default=4.0,
         help='Maximum alignment displacement in feature pixels.',
     )
+    parser.add_argument('--feedback_interval', type=int, default=2)
+    parser.add_argument('--feedback_alignment_levels', type=int, default=2)
+    parser.add_argument('--feedback_eval_tile_size', type=int, default=384)
+    parser.add_argument('--feedback_eval_tile_overlap', type=int, default=64)
 
     return parser.parse_args()
 
@@ -570,6 +597,14 @@ def main(args):
         )
     if args.structure_max_shift <= 0:
         raise ValueError('structure_max_shift must be positive.')
+    if args.feedback_interval <= 0:
+        raise ValueError('feedback_interval must be positive.')
+    if args.feedback_alignment_levels < 2:
+        raise ValueError('feedback_alignment_levels must be at least two.')
+    if args.feedback_eval_tile_size <= 0:
+        raise ValueError('feedback_eval_tile_size must be positive.')
+    if not 0 <= args.feedback_eval_tile_overlap < args.feedback_eval_tile_size:
+        raise ValueError('invalid feedback evaluation tile overlap.')
 
     runtime = initialize_distributed(args.gpu, args.gpu_num)
     if args.batch_size % runtime.world_size:
@@ -723,8 +758,12 @@ def main(args):
     )
 
     log_string("start loading training data ...")
+    train_transform = (
+        SequenceGeometryAugmentation()
+        if args.sequence_augmentation else None
+    )
     TRAIN_DATASET = TrainIRSeqDataLoader(args.dataset, data_root=root, seq_len=SEQ_LEN, sample_rate=args.sample_rate,
-                                         patch_size=args.patch_size, transform=None)  # sample_rate=0.1, 0.03, 0.05
+                                         patch_size=args.patch_size, transform=train_transform)  # sample_rate=0.1, 0.03, 0.05
     train_sampler = None
     if runtime.distributed:
         train_sampler = DistributedSampler(
@@ -832,6 +871,7 @@ def main(args):
             'DeepPro-Plus_BRTD': ('brtd_adapter.py',),
             'DeepPro-Plus_BRTD2': ('brtd_v2_adapter.py',),
             'DeepPro-Plus_BRTD3': ('structure_adapters.py',),
+            'DeepPro-FeedbackSTS': ('feedback_sts.py',),
         }.get(args.model, ())
         for adapter_filename in adapter_filenames:
             adapter_source = (
@@ -929,6 +969,13 @@ def main(args):
         stc_center_weight=args.stc_center_weight,
         stc_temporal_weight=args.stc_temporal_weight,
         stc_warmup_epochs=args.stc_warmup_epochs,
+        f1_ohem_dice_weight=args.f1_ohem_dice_weight,
+        f1_ohem_hard_weight=args.f1_ohem_hard_weight,
+        f1_ohem_negative_ratio=args.f1_ohem_negative_ratio,
+        f1_ohem_min_negatives=args.f1_ohem_min_negatives,
+        f1_ohem_margin=args.f1_ohem_margin,
+        f1_ohem_warmup_epochs=args.f1_ohem_warmup_epochs,
+        f1_ohem_ramp_epochs=args.f1_ohem_ramp_epochs,
     ).to(runtime.device)
     log_string('Loss: %s - %s' % (args.loss, LOSS_DESCRIPTIONS[args.loss]))
     if getattr(criterion, 'requires_images', False):
