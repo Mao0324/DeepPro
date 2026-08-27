@@ -29,6 +29,10 @@ FEEDBACK_SEED="${FEEDBACK_SEED:-47}"
 FEEDBACK_BATCH_SIZE="${FEEDBACK_BATCH_SIZE:-6}"
 FEEDBACK_EPOCHS="${FEEDBACK_EPOCHS:-100}"
 FEEDBACK_EVAL_INTERVAL="${FEEDBACK_EVAL_INTERVAL:-5}"
+FEEDBACK_LEARNING_RATE="${FEEDBACK_LEARNING_RATE:-0.0005}"
+FEEDBACK_RESUME_MODE="${FEEDBACK_RESUME_MODE:-never}"
+FEEDBACK_SWANLAB_ID="${FEEDBACK_SWANLAB_ID:-}"
+FEEDBACK_SWANLAB_RESUME="${FEEDBACK_SWANLAB_RESUME:-never}"
 THRESHOLD_GRID="${THRESHOLD_GRID:-0.02:0.80:0.01}"
 SWANLAB_CREDENTIAL_FILE="${SWANLAB_CREDENTIAL_FILE:-/home/user/.swanlab/.netrc}"
 
@@ -51,8 +55,21 @@ if [[ -z "${SWANLAB_API_KEY:-}" ]]; then
     echo "SwanLab cloud credential is unavailable." >&2
     exit 1
 fi
-if [[ -e "$EXPERIMENT_DIR" ]]; then
+if [[ "$FEEDBACK_RESUME_MODE" == "auto" && -z "$FEEDBACK_SWANLAB_ID" ]]; then
+    echo "A resumed experiment must provide FEEDBACK_SWANLAB_ID." >&2
+    exit 2
+fi
+
+swanlab_id_arguments=()
+if [[ -n "$FEEDBACK_SWANLAB_ID" ]]; then
+    swanlab_id_arguments=(--swanlab_id "$FEEDBACK_SWANLAB_ID")
+fi
+if [[ -e "$EXPERIMENT_DIR" && "$FEEDBACK_RESUME_MODE" != "auto" ]]; then
     echo "Refusing to reuse experiment directory: $EXPERIMENT_DIR" >&2
+    exit 1
+fi
+if [[ "$FEEDBACK_RESUME_MODE" == "auto" && ! -f "$EXPERIMENT_DIR/checkpoints/latest_model.pth" ]]; then
+    echo "Resume requested but latest checkpoint is unavailable: $EXPERIMENT_DIR" >&2
     exit 1
 fi
 
@@ -78,7 +95,7 @@ cd "$REPO_ROOT"
     --savepath "$REPO_ROOT/log" \
     --log_dir "$EXPERIMENT_NAME" \
     --optimizer Adam \
-    --learning_rate 0.0005 \
+    --learning_rate "$FEEDBACK_LEARNING_RATE" \
     --decay_rate 0.0001 \
     --batch_size "$FEEDBACK_BATCH_SIZE" \
     --gradient_accumulation_steps 1 \
@@ -112,14 +129,16 @@ cd "$REPO_ROOT"
     --feedback_eval_tile_overlap 64 \
     --eval_amp 1 \
     --eval_interval "$FEEDBACK_EVAL_INTERVAL" \
-    --resume never \
+    --resume "$FEEDBACK_RESUME_MODE" \
     --seed "$FEEDBACK_SEED" \
     --deterministic 0 \
     --run_test_after_train 0 \
     --use_swanlab 1 \
     --swanlab_project CSIG2026-DeepPro \
     --swanlab_group "$SWANLAB_GROUP" \
-    --swanlab_mode cloud
+    --swanlab_mode cloud \
+    --swanlab_resume "$FEEDBACK_SWANLAB_RESUME" \
+    "${swanlab_id_arguments[@]}"
 
 POST_ROOT="$EXPERIMENT_DIR/postprocess"
 PROBABILITY_ROOT="$POST_ROOT/probabilities"

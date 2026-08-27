@@ -88,8 +88,10 @@ flowchart LR
 ## 运行与验收
 
 - 物理 GPU：仅 `0,1,2`，一个三进程 DDP 网络；
-- 序列/patch：`13 / 128`；全局 batch `6`，每卡 `2`；
-- Adam，初始学习率 `5e-4`，最多 100 epoch，5 epoch 一次三卡分片验证；
+- 序列/patch：`13 / 128`；epoch 1–3 全局 batch `6`，随后从同一 checkpoint
+  提高到全局 batch `24`（每卡 `8`）；
+- Adam，batch 6 时学习率 `5e-4`，batch 24 续跑时学习率 `1e-3`；最多 100 epoch，
+  5 epoch 一次三卡分片验证；
 - SwanLab cloud 全程记录；Top-5 checkpoint 逐个导出、质心阈值扫描、轨迹化；
 - 最终 ZIP 必须通过结构/帧数校验并生成 SHA256。
 
@@ -98,6 +100,10 @@ flowchart LR
 - 实验目录：`2026-08-27/SatVideoIRSDT_v1__2026-08-27_02-46-06__FeedbackSTS-F1-feedbacksts_t2_recallaug_ddp3_seed47_E100`；
 - [SwanLab run](https://swanlab.cn/@SInt123/CSIG2026-DeepPro/runs/xpep23qnp7y93bnu9pulp)；
 - 预期提交包：`submission/submit_feedbacksts_t2_recallaug_ddp3_seed47_best_proxy_f1.zip`。
+
+epoch 3 checkpoint 落盘后按用户要求扩大 batch。每卡 batch 8 的单步峰值实测约
+`6.0 GiB`，完整 epoch 从 665 步降到 166 步，实测吞吐约由 4.3 分钟/epoch 缩短到
+1.7 分钟/epoch；恢复路径继续使用同一模型、Adam 状态、早停状态和 SwanLab run。
 
 10:41 的短暂 run `92bnlg69j3m4qcyokd0a3` 只用于启动前复核，在首个 epoch 内主动
 终止；它缺少 modulation mask，不进入性能对比或 checkpoint 选择。
