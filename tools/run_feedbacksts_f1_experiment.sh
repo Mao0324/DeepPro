@@ -27,6 +27,7 @@ STATUS_FILE="$STATUS_DIR/${SLUG}.status"
 
 FEEDBACK_SEED="${FEEDBACK_SEED:-47}"
 FEEDBACK_BATCH_SIZE="${FEEDBACK_BATCH_SIZE:-6}"
+FEEDBACK_SEQ_LEN="${FEEDBACK_SEQ_LEN:-40}"
 FEEDBACK_EPOCHS="${FEEDBACK_EPOCHS:-100}"
 FEEDBACK_EVAL_INTERVAL="${FEEDBACK_EVAL_INTERVAL:-5}"
 FEEDBACK_LEARNING_RATE="${FEEDBACK_LEARNING_RATE:-0.0005}"
@@ -43,6 +44,10 @@ if [[ "$GPU_SPEC" != "0,1,2" || "$GPU_NUM" -ne 3 ]]; then
 fi
 if [[ "$FEEDBACK_BATCH_SIZE" -le 0 || $((FEEDBACK_BATCH_SIZE % GPU_NUM)) -ne 0 ]]; then
     echo "Global batch must be positive and divisible by three." >&2
+    exit 2
+fi
+if [[ "$FEEDBACK_SEQ_LEN" -ne 40 ]]; then
+    echo "The F1-priority SatVideoIRSDT run requires the baseline temporal context: FEEDBACK_SEQ_LEN=40." >&2
     exit 2
 fi
 if [[ -z "${SWANLAB_API_KEY:-}" && -r "$SWANLAB_CREDENTIAL_FILE" ]]; then
@@ -104,7 +109,7 @@ cd "$REPO_ROOT"
     --early_stopping_min_delta 0.0001 \
     --early_stopping_start_epoch 20 \
     --early_stopping_metric eval_f1 \
-    --seqlen 13 \
+    --seqlen "$FEEDBACK_SEQ_LEN" \
     --patch_size 128 \
     --sample_rate 0.04 \
     --sequence_augmentation 1 \
@@ -176,7 +181,7 @@ for selector in "${CHECKPOINT_SELECTORS[@]}"; do
 
     "$PYTHON_BIN" -u test.py \
         --gpu "$POSTPROCESS_GPU" \
-        --seqlen 13 \
+        --seqlen "$FEEDBACK_SEQ_LEN" \
         --datapath "$DATA_ROOT" \
         --dataset SatVideoIRSDT_v1 \
         --logpath "$REPO_ROOT/log" \

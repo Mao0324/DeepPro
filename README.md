@@ -19,7 +19,7 @@ decoder propagation, and pyramid deformable alignment. The earlier
 | Main candidate | `DeepPro-FeedbackSTS` |
 | Scratch website baseline | `raw_apmd_hybrid_rms`: `86.71` |
 | Completed recent runs | scratch-init `86.45`; bandpass `86.47` |
-| Active structural candidate | FeedbackSTS T=2 + recall-oriented loss + sequence augmentation |
+| Active structural candidate | FeedbackSTS, 40 frames, T=2 + recall-oriented loss + sequence augmentation |
 | Initialization | Random weights only; pretrained initialization is forbidden |
 | Loss | `f1_calibrated_ohem` with valid-frame masking |
 | Training devices | One DDP job on physical GPUs `0,1,2` |

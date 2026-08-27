@@ -16,7 +16,8 @@ fi
 
 GPU_SPEC="0,1,2"
 FEEDBACK_SEED="${FEEDBACK_SEED:-47}"
-SLUG="feedbacksts_t2_recallaug_ddp3_seed${FEEDBACK_SEED}"
+FEEDBACK_SEQ_LEN="${FEEDBACK_SEQ_LEN:-40}"
+SLUG="feedbacksts_l${FEEDBACK_SEQ_LEN}_t2_recallaug_ddp3_seed${FEEDBACK_SEED}"
 BATCH_STAMP="$(date -u +%Y-%m-%d_%H-%M-%S)"
 RUN_DATE="${BATCH_STAMP%%_*}"
 DAY_ROOT="$REPO_ROOT/log/sem_seg/$RUN_DATE"
@@ -28,6 +29,10 @@ SWANLAB_GROUP="feedbacksts_f1_ddp3_seed${FEEDBACK_SEED}_${BATCH_STAMP}"
 SWANLAB_CREDENTIAL_FILE="${SWANLAB_CREDENTIAL_FILE:-/home/user/.swanlab/.netrc}"
 
 csig_require_allowed_gpus "$GPU_SPEC"
+if [[ "$FEEDBACK_SEQ_LEN" -ne 40 ]]; then
+    echo "F1-priority launcher requires FEEDBACK_SEQ_LEN=40." >&2
+    exit 2
+fi
 if [[ -e "$EXPERIMENT" ]]; then
     echo "Refusing to reuse existing experiment: $EXPERIMENT" >&2
     exit 1
@@ -39,6 +44,8 @@ fi
 
 echo "model=DeepPro-FeedbackSTS scratch_only=1"
 echo "gpus=$GPU_SPEC world_size=3 global_batch=${FEEDBACK_BATCH_SIZE:-6}"
+echo "sequence_length=$FEEDBACK_SEQ_LEN (baseline temporal context)"
+echo "learning_rate=${FEEDBACK_LEARNING_RATE:-0.0005}"
 echo "experiment=$EXPERIMENT"
 echo "expected_zip=$EXPERIMENT/submission/submit_${SLUG}_best_proxy_f1.zip"
 echo "swanlab_group=$SWANLAB_GROUP"
@@ -70,7 +77,9 @@ fi
 screen -dmS "$SESSION" -L -Logfile "$SCREEN_LOG" \
     env \
         FEEDBACK_SEED="$FEEDBACK_SEED" \
+        FEEDBACK_SEQ_LEN="$FEEDBACK_SEQ_LEN" \
         FEEDBACK_BATCH_SIZE="${FEEDBACK_BATCH_SIZE:-6}" \
+        FEEDBACK_LEARNING_RATE="${FEEDBACK_LEARNING_RATE:-0.0005}" \
         FEEDBACK_EPOCHS="${FEEDBACK_EPOCHS:-100}" \
         FEEDBACK_EVAL_INTERVAL="${FEEDBACK_EVAL_INTERVAL:-5}" \
         SWANLAB_CREDENTIAL_FILE="$SWANLAB_CREDENTIAL_FILE" \

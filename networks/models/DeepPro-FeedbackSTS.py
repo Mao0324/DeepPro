@@ -13,8 +13,8 @@ class detector(nn.Module):
     def __init__(
         self,
         num_classes,
-        seqlen=13,
-        out_len=13,
+        seqlen=40,
+        out_len=40,
         feedback_interval=2,
         feedback_alignment_levels=2,
         feedback_eval_tile_size=384,

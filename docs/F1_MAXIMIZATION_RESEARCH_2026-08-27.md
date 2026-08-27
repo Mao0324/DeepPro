@@ -8,8 +8,14 @@
 优先路线，首选独立的 `DeepPro-FeedbackSTS` 网络。
 
 该选择不是因为参数更少，而是因为它同时满足四个条件：直接针对卫星红外视频；显式
-处理跨帧位移；能利用 13 帧双向语义；原论文在 IRSatVideo 上相对 RFR 报告了更高 F1。
+处理跨帧位移；能利用 40 帧双向语义；原论文在 IRSatVideo 上相对 RFR 报告了更高 F1。
 新实现不加载任何预训练权重。
+
+最初启动器曾照搬官方多 GPU 命令示例中的 `seq_len=13`。官方单 GPU 示例实际使用
+`seq_len=5`，两者都是针对 IRSatVideo-LEO/NUDT-MIRSDT 的配置，并不是当前
+SatVideoIRSDT 的长度消融结论。由于本项目 baseline、数据管线默认值和已有长时序
+证据均为 `40` 帧，且当前准则是 F1 优先，13 帧任务在产生验证 F1 前即终止；正式
+候选恢复为训练、验证和提交推理全程 `seqlen=40`。
 
 ## 当前误差诊断
 
@@ -49,7 +55,7 @@ Tversky `FP=0.6 / FN=0.4`，并保留最多 4 倍正样本数的困难负样本�
 
 ```mermaid
 flowchart LR
-    X[13帧原始序列 Bx1xTxHxW] --> E1[8ch 3D块 + 前向SSM]
+    X[40帧原始序列 Bx1xTxHxW] --> E1[8ch 3D块 + 前向SSM]
     E1 --> P1[空间下采样]
     P1 --> E2[16ch + 前向SSM]
     E2 --> E3[32ch + 前向SSM]
@@ -60,7 +66,7 @@ flowchart LR
     D3 --> D2[上采样 + skip + 后向SSM]
     D2 --> D1[上采样 + skip + 后向SSM]
     D1 --> H[1x1x1 logits头]
-    H --> Y[13帧分割logits]
+    H --> Y[40帧分割logits]
 ```
 
 每个 SSM 按固定间隔 `T=2` 把帧分组，在组内用两级金字塔形变卷积把当前特征对齐到
@@ -88,30 +94,31 @@ flowchart LR
 ## 运行与验收
 
 - 物理 GPU：仅 `0,1,2`，一个三进程 DDP 网络；
-- 序列/patch：`13 / 128`；epoch 1–3 全局 batch `6`，随后从同一 checkpoint
-  提高到全局 batch `24`（每卡 `8`）；
-- Adam，batch 6 时学习率 `5e-4`，batch 24 续跑时学习率 `1e-3`；最多 100 epoch，
+- 序列/patch：`40 / 128`；全局 batch `6`（每卡 `2`），保持 baseline 的长时序
+  上下文和接近历史方案的每卡优化统计；
+- Adam，学习率 `5e-4`；最多 100 epoch，
   5 epoch 一次三卡分片验证；
 - SwanLab cloud 全程记录；Top-5 checkpoint 逐个导出、质心阈值扫描、轨迹化；
 - 最终 ZIP 必须通过结构/帧数校验并生成 SHA256。
 
-正式 run 于 2026-08-27 10:46（Asia/Shanghai）启动：
+当前正式 run 于 2026-08-27 11:10（Asia/Shanghai）从随机权重启动：
 
-- 实验目录：`2026-08-27/SatVideoIRSDT_v1__2026-08-27_02-46-06__FeedbackSTS-F1-feedbacksts_t2_recallaug_ddp3_seed47_E100`；
-- [SwanLab run](https://swanlab.cn/@SInt123/CSIG2026-DeepPro/runs/xpep23qnp7y93bnu9pulp)；
-- 预期提交包：`submission/submit_feedbacksts_t2_recallaug_ddp3_seed47_best_proxy_f1.zip`。
+- 实验目录：`2026-08-27/SatVideoIRSDT_v1__2026-08-27_03-10-21__FeedbackSTS-F1-feedbacksts_l40_t2_recallaug_ddp3_seed47_E100`；
+- [SwanLab run](https://swanlab.cn/@SInt123/CSIG2026-DeepPro/runs/aak83i4ozjnz8yxj8merx)；
+- 预期提交包：`submission/submit_feedbacksts_l40_t2_recallaug_ddp3_seed47_best_proxy_f1.zip`。
 
-epoch 3 checkpoint 落盘后按用户要求扩大 batch。每卡 batch 8 的单步峰值实测约
-`6.0 GiB`，完整 epoch 从 665 步降到 166 步，实测吞吐约由 4.3 分钟/epoch 缩短到
-1.7 分钟/epoch；恢复路径继续使用同一模型、Adam 状态、早停状态和 SwanLab run。
+当前 DataLoader 实测为 3850 个 40 帧滑窗，641 step/epoch；显存约
+`5.6 GiB/卡`。低显存不是缩短时序的理由，也不以盲目扩大 batch 换取速度；只有在
+验证 F1 不下降的证据下才提高 batch。旧的 13 帧 batch 6 实验在 epoch 3 后终止，
+13 帧 batch 24 重启实验在 epoch 2 中终止，均没有完整验证 F1，不进入候选比较。
 
 10:41 的短暂 run `92bnlg69j3m4qcyokd0a3` 只用于启动前复核，在首个 epoch 内主动
 终止；它缺少 modulation mask，不进入性能对比或 checkpoint 选择。
 
 已完成的代码验收：Python 与 shell 语法、奇数空间尺寸补边、CPU 前反向、真实
-`T=13,128x128` CUDA 前反向、三卡 NCCL/DDP 同步。最终调制形变版本每卡 batch 2
-的三卡 DDP 峰值约 `1.59 GiB`；`1024x1024` AMP 全帧推理峰值约
-`2.54 GiB`，因此使用全帧验证而不是 384 小块拼接。
+`T=13,128x128` CUDA 前反向、三卡 NCCL/DDP 同步，以及正式 `T=40` 三卡训练启动。
+当前验证仍使用 AMP 与 1024 tile 上限；训练/推理序列长度由同一个
+`FEEDBACK_SEQ_LEN=40` 传递并由启动器强制检查。
 
 ## 晋级与证伪标准
 
