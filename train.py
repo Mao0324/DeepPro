@@ -135,6 +135,7 @@ def clean_model_state_dict(state_dict):
 def make_checkpoint_state(
     detector,
     optimizer,
+    grad_scaler,
     epoch,
     best_iou,
     args,
@@ -155,6 +156,7 @@ def make_checkpoint_state(
         'model_config': stored_config,
         'model_state_dict': unwrap_model(detector).state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
+        'grad_scaler_state_dict': grad_scaler.state_dict(),
     }
     if early_stopping_state is not None:
         state['early_stopping_state'] = dict(early_stopping_state)
@@ -474,6 +476,10 @@ def parse_args():
     parser.add_argument("--freeze_pretrained", type=int, default=0)
     parser.add_argument('--eval_chunk_rows', type=int, default=0,
                         help='TPro evaluation row chunk size; 0 disables chunking')
+    parser.add_argument(
+        '--train_amp', type=int, default=0, choices=[0, 1],
+        help='Use FP16 CUDA autocast with FP32 loss and GradScaler during training.',
+    )
     parser.add_argument(
         '--eval_amp', type=int, default=0, choices=[0, 1],
         help='Use FP16 CUDA autocast during validation [default: 0].',
@@ -1040,6 +1046,9 @@ def main(args):
             lr=args.learning_rate,
             momentum=0.9
         )
+    grad_scaler = torch.cuda.amp.GradScaler(
+        enabled=bool(args.train_amp)
+    )
 
     best_iou = 0
     start_epoch = 0
@@ -1062,6 +1071,9 @@ def main(args):
             )
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             move_optimizer_state(optimizer, runtime.device)
+            saved_grad_scaler = checkpoint.get('grad_scaler_state_dict')
+            if args.train_amp and saved_grad_scaler:
+                grad_scaler.load_state_dict(saved_grad_scaler)
             start_epoch = int(checkpoint['epoch']) + 1
             best_iou = float(checkpoint.get('class_avg_iou', 0.0))
             saved_early_stopping_state = checkpoint.get(
@@ -1104,6 +1116,10 @@ def main(args):
             ) from error
     else:
         log_string('Starting a new experiment from scratch.')
+    log_string(
+        'Training precision: %s.'
+        % ('AMP FP16 model / FP32 loss' if args.train_amp else 'FP32')
+    )
 
     if early_stopping_state is None:
         log_string('Early stopping disabled.')
@@ -1181,7 +1197,12 @@ def main(args):
                 else detector.no_sync()
             )
             with synchronization_context:
-                sequence_features, seq_midpred = detector(images)
+                with torch.autocast(
+                    device_type='cuda',
+                    dtype=torch.float16,
+                    enabled=bool(args.train_amp),
+                ):
+                    sequence_features, seq_midpred = detector(images)
                 del sequence_features
 
                 criterion_arguments = {
@@ -1190,12 +1211,17 @@ def main(args):
                 }
                 if valid_frames is not None:
                     criterion_arguments['valid_frames'] = valid_frames
+                # Keep overlap reductions and hard-negative ranking in FP32;
+                # only the compute-heavy network runs under autocast.
                 loss = criterion(
-                    seq_midpred, targets, **criterion_arguments
+                    seq_midpred.float(), targets, **criterion_arguments
                 )
-                (loss / accumulation_window_size).backward()
+                grad_scaler.scale(
+                    loss / accumulation_window_size
+                ).backward()
             if should_step:
-                optimizer.step()
+                grad_scaler.step(optimizer)
+                grad_scaler.update()
                 optimizer.zero_grad(set_to_none=True)
 
             with torch.no_grad():
@@ -1284,6 +1310,7 @@ def main(args):
                 state = make_checkpoint_state(
                     detector,
                     optimizer,
+                    grad_scaler,
                     epoch,
                     best_iou,
                     args,
@@ -1380,6 +1407,7 @@ def main(args):
             state = make_checkpoint_state(
                 detector,
                 optimizer,
+                grad_scaler,
                 epoch,
                 best_iou,
                 args,

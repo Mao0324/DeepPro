@@ -26,11 +26,16 @@ STATUS_DIR="$DAY_ROOT/_feedbacksts_pipeline_status"
 STATUS_FILE="$STATUS_DIR/${SLUG}.status"
 
 FEEDBACK_SEED="${FEEDBACK_SEED:-47}"
-FEEDBACK_BATCH_SIZE="${FEEDBACK_BATCH_SIZE:-6}"
+FEEDBACK_BATCH_SIZE="${FEEDBACK_BATCH_SIZE:-24}"
 FEEDBACK_SEQ_LEN="${FEEDBACK_SEQ_LEN:-40}"
-FEEDBACK_EPOCHS="${FEEDBACK_EPOCHS:-100}"
+FEEDBACK_EPOCHS="${FEEDBACK_EPOCHS:-130}"
 FEEDBACK_EVAL_INTERVAL="${FEEDBACK_EVAL_INTERVAL:-5}"
-FEEDBACK_LEARNING_RATE="${FEEDBACK_LEARNING_RATE:-0.0005}"
+FEEDBACK_LEARNING_RATE="${FEEDBACK_LEARNING_RATE:-0.001}"
+FEEDBACK_TRAIN_AMP="${FEEDBACK_TRAIN_AMP:-1}"
+FEEDBACK_STEP_SIZE="${FEEDBACK_STEP_SIZE:-13}"
+FEEDBACK_EARLY_STOPPING_START="${FEEDBACK_EARLY_STOPPING_START:-27}"
+FEEDBACK_F1_WARMUP_EPOCHS="${FEEDBACK_F1_WARMUP_EPOCHS:-7}"
+FEEDBACK_F1_RAMP_EPOCHS="${FEEDBACK_F1_RAMP_EPOCHS:-13}"
 FEEDBACK_RESUME_MODE="${FEEDBACK_RESUME_MODE:-never}"
 FEEDBACK_SWANLAB_ID="${FEEDBACK_SWANLAB_ID:-}"
 FEEDBACK_SWANLAB_RESUME="${FEEDBACK_SWANLAB_RESUME:-never}"
@@ -48,6 +53,10 @@ if [[ "$FEEDBACK_BATCH_SIZE" -le 0 || $((FEEDBACK_BATCH_SIZE % GPU_NUM)) -ne 0 ]
 fi
 if [[ "$FEEDBACK_SEQ_LEN" -ne 40 ]]; then
     echo "The F1-priority SatVideoIRSDT run requires the baseline temporal context: FEEDBACK_SEQ_LEN=40." >&2
+    exit 2
+fi
+if [[ "$FEEDBACK_TRAIN_AMP" != "0" && "$FEEDBACK_TRAIN_AMP" != "1" ]]; then
+    echo "FEEDBACK_TRAIN_AMP must be 0 or 1." >&2
     exit 2
 fi
 if [[ -z "${SWANLAB_API_KEY:-}" && -r "$SWANLAB_CREDENTIAL_FILE" ]]; then
@@ -107,13 +116,13 @@ cd "$REPO_ROOT"
     --epoch "$FEEDBACK_EPOCHS" \
     --early_stopping_patience 6 \
     --early_stopping_min_delta 0.0001 \
-    --early_stopping_start_epoch 20 \
+    --early_stopping_start_epoch "$FEEDBACK_EARLY_STOPPING_START" \
     --early_stopping_metric eval_f1 \
     --seqlen "$FEEDBACK_SEQ_LEN" \
     --patch_size 128 \
     --sample_rate 0.04 \
     --sequence_augmentation 1 \
-    --step_size 10 \
+    --step_size "$FEEDBACK_STEP_SIZE" \
     --lr_decay 0.7 \
     --threshold_eval 0.10 \
     --train_workers 4 \
@@ -128,10 +137,13 @@ cd "$REPO_ROOT"
     --f1_ohem_hard_weight 0.05 \
     --f1_ohem_negative_ratio 1.5 \
     --f1_ohem_min_negatives 128 \
+    --f1_ohem_warmup_epochs "$FEEDBACK_F1_WARMUP_EPOCHS" \
+    --f1_ohem_ramp_epochs "$FEEDBACK_F1_RAMP_EPOCHS" \
     --feedback_interval 2 \
     --feedback_alignment_levels 2 \
     --feedback_eval_tile_size 1024 \
     --feedback_eval_tile_overlap 64 \
+    --train_amp "$FEEDBACK_TRAIN_AMP" \
     --eval_amp 1 \
     --eval_interval "$FEEDBACK_EVAL_INTERVAL" \
     --resume "$FEEDBACK_RESUME_MODE" \

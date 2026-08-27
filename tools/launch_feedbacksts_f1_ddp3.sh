@@ -43,9 +43,11 @@ if [[ -z "${SWANLAB_API_KEY:-}" && ! -r "$SWANLAB_CREDENTIAL_FILE" ]]; then
 fi
 
 echo "model=DeepPro-FeedbackSTS scratch_only=1"
-echo "gpus=$GPU_SPEC world_size=3 global_batch=${FEEDBACK_BATCH_SIZE:-6}"
+echo "gpus=$GPU_SPEC world_size=3 global_batch=${FEEDBACK_BATCH_SIZE:-24}"
 echo "sequence_length=$FEEDBACK_SEQ_LEN (baseline temporal context)"
-echo "learning_rate=${FEEDBACK_LEARNING_RATE:-0.0005}"
+echo "learning_rate=${FEEDBACK_LEARNING_RATE:-0.001}"
+echo "train_amp=${FEEDBACK_TRAIN_AMP:-1} (FP32 loss)"
+echo "update_equivalent_schedule=epochs:${FEEDBACK_EPOCHS:-130} step:${FEEDBACK_STEP_SIZE:-13} f1_warmup:${FEEDBACK_F1_WARMUP_EPOCHS:-7} f1_ramp:${FEEDBACK_F1_RAMP_EPOCHS:-13}"
 echo "experiment=$EXPERIMENT"
 echo "expected_zip=$EXPERIMENT/submission/submit_${SLUG}_best_proxy_f1.zip"
 echo "swanlab_group=$SWANLAB_GROUP"
@@ -78,10 +80,15 @@ screen -dmS "$SESSION" -L -Logfile "$SCREEN_LOG" \
     env \
         FEEDBACK_SEED="$FEEDBACK_SEED" \
         FEEDBACK_SEQ_LEN="$FEEDBACK_SEQ_LEN" \
-        FEEDBACK_BATCH_SIZE="${FEEDBACK_BATCH_SIZE:-6}" \
-        FEEDBACK_LEARNING_RATE="${FEEDBACK_LEARNING_RATE:-0.0005}" \
-        FEEDBACK_EPOCHS="${FEEDBACK_EPOCHS:-100}" \
+        FEEDBACK_BATCH_SIZE="${FEEDBACK_BATCH_SIZE:-24}" \
+        FEEDBACK_LEARNING_RATE="${FEEDBACK_LEARNING_RATE:-0.001}" \
+        FEEDBACK_TRAIN_AMP="${FEEDBACK_TRAIN_AMP:-1}" \
+        FEEDBACK_EPOCHS="${FEEDBACK_EPOCHS:-130}" \
         FEEDBACK_EVAL_INTERVAL="${FEEDBACK_EVAL_INTERVAL:-5}" \
+        FEEDBACK_STEP_SIZE="${FEEDBACK_STEP_SIZE:-13}" \
+        FEEDBACK_EARLY_STOPPING_START="${FEEDBACK_EARLY_STOPPING_START:-27}" \
+        FEEDBACK_F1_WARMUP_EPOCHS="${FEEDBACK_F1_WARMUP_EPOCHS:-7}" \
+        FEEDBACK_F1_RAMP_EPOCHS="${FEEDBACK_F1_RAMP_EPOCHS:-13}" \
         SWANLAB_CREDENTIAL_FILE="$SWANLAB_CREDENTIAL_FILE" \
         THRESHOLD_GRID="${THRESHOLD_GRID:-0.02:0.80:0.01}" \
     bash "$RUNNER" "$GPU_SPEC" "$SLUG" "$BATCH_STAMP" "$SWANLAB_GROUP"

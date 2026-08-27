@@ -94,22 +94,26 @@ flowchart LR
 ## 运行与验收
 
 - 物理 GPU：仅 `0,1,2`，一个三进程 DDP 网络；
-- 序列/patch：`40 / 128`；全局 batch `6`（每卡 `2`），保持 baseline 的长时序
-  上下文和接近历史方案的每卡优化统计；
-- Adam，学习率 `5e-4`；最多 100 epoch，
+- 序列/patch：`40 / 128`；全局 batch `24`（每卡 `8`）；历史 40 帧实验使用
+  global batch `18/20`，本轮只做适度扩大；
+- Adam，学习率 `1e-3`；训练网络前反向使用 AMP，F1 loss 与困难样本排序保持 FP32；
+  为补偿 batch24 每轮更新数下降，最多 `130` epoch、每 `13` epoch 衰减 LR、
+  hard-OHEM warm-up/ramp 为 `7/13` epoch，early stopping 从 epoch `27` 开始；
   5 epoch 一次三卡分片验证；
 - SwanLab cloud 全程记录；Top-5 checkpoint 逐个导出、质心阈值扫描、轨迹化；
 - 最终 ZIP 必须通过结构/帧数校验并生成 SHA256。
 
-当前正式 run 于 2026-08-27 11:10（Asia/Shanghai）从随机权重启动：
+11:10 的 40 帧 FP32 batch 6 run 与 11:18 的 AMP batch 18 run 都在首轮形成 checkpoint
+前主动终止，分别用于确认时序成本和吞吐，不进入性能比较。最终正式 run 从随机权重启动：
 
-- 实验目录：`2026-08-27/SatVideoIRSDT_v1__2026-08-27_03-10-21__FeedbackSTS-F1-feedbacksts_l40_t2_recallaug_ddp3_seed47_E100`；
-- [SwanLab run](https://swanlab.cn/@SInt123/CSIG2026-DeepPro/runs/aak83i4ozjnz8yxj8merx)；
+- 实验目录：`2026-08-27/SatVideoIRSDT_v1__2026-08-27_03-23-00__FeedbackSTS-F1-feedbacksts_l40_t2_recallaug_ddp3_seed47_E100`；
+- [SwanLab run](https://swanlab.cn/@SInt123/CSIG2026-DeepPro/runs/78j2ga6249hmwbzqsdzhq)；
 - 预期提交包：`submission/submit_feedbacksts_l40_t2_recallaug_ddp3_seed47_best_proxy_f1.zip`。
 
-当前 DataLoader 实测为 3850 个 40 帧滑窗，641 step/epoch；显存约
-`5.6 GiB/卡`。低显存不是缩短时序的理由，也不以盲目扩大 batch 换取速度；只有在
-验证 F1 不下降的证据下才提高 batch。旧的 13 帧 batch 6 实验在 epoch 3 后终止，
+当前 DataLoader 实测为 3850 个 40 帧滑窗，batch 24 时为 160 step/epoch；显存约
+`15.0 GiB allocated / 15.75 GiB reserved`。训练 AMP 的三步测试不存在非有限 loss/梯度，
+时序 residue chain 的等价批量化在前向和输入梯度上最大误差均为 `0.0`；每卡 batch 8
+稳态约 `1.272 s/step`，正式 DDP 预计约 4–5 分钟/epoch。旧的 13 帧 batch 6 实验在 epoch 3 后终止，
 13 帧 batch 24 重启实验在 epoch 2 中终止，均没有完整验证 F1，不进入候选比较。
 
 10:41 的短暂 run `92bnlg69j3m4qcyokd0a3` 只用于启动前复核，在首个 epoch 内主动

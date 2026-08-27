@@ -168,12 +168,9 @@ class SparseSemanticPropagation(nn.Module):
             channels, levels=alignment_levels
         )
 
-    def forward(self, sequence):
-        if sequence.ndim != 5:
-            raise ValueError('expected [B,C,T,H,W] sequence')
+    def _forward_serial(self, sequence):
+        """Reference implementation for unequal temporal groups."""
         frame_count = sequence.shape[2]
-        if frame_count < 2:
-            return sequence
         outputs = [None] * frame_count
         for group_start in range(min(self.interval, frame_count)):
             indices = list(range(
@@ -188,6 +185,60 @@ class SparseSemanticPropagation(nn.Module):
                 propagated = self.alignment(current, propagated)
                 outputs[frame_index] = propagated
         return torch.stack(outputs, dim=2)
+
+    def _forward_equal_groups(self, sequence):
+        """Evaluate independent temporal residue chains as one batch."""
+        batch, channels, frame_count, height, width = sequence.shape
+        step_count = frame_count // self.interval
+        groups = torch.stack([
+            sequence[:, :, group_start::self.interval]
+            for group_start in range(self.interval)
+        ], dim=1).reshape(
+            batch * self.interval,
+            channels,
+            step_count,
+            height,
+            width,
+        )
+        if not self.forward_direction:
+            groups = groups.flip(2)
+
+        propagated = groups[:, :, 0]
+        outputs = [propagated]
+        for step_index in range(1, step_count):
+            propagated = self.alignment(
+                groups[:, :, step_index], propagated
+            )
+            outputs.append(propagated)
+        outputs = torch.stack(outputs, dim=2)
+        if not self.forward_direction:
+            outputs = outputs.flip(2)
+
+        # [B, interval, C, steps, H, W] -> original interleaved frames.
+        return outputs.reshape(
+            batch,
+            self.interval,
+            channels,
+            step_count,
+            height,
+            width,
+        ).permute(0, 2, 3, 1, 4, 5).reshape(
+            batch, channels, frame_count, height, width
+        )
+
+    def forward(self, sequence):
+        if sequence.ndim != 5:
+            raise ValueError('expected [B,C,T,H,W] sequence')
+        frame_count = sequence.shape[2]
+        if frame_count < 2:
+            return sequence
+        if (
+            self.interval > 1
+            and frame_count >= self.interval
+            and frame_count % self.interval == 0
+        ):
+            return self._forward_equal_groups(sequence)
+        return self._forward_serial(sequence)
 
 
 class SpatioTemporalFeedbackBlock(nn.Module):

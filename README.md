@@ -23,6 +23,7 @@ decoder propagation, and pyramid deformable alignment. The earlier
 | Initialization | Random weights only; pretrained initialization is forbidden |
 | Loss | `f1_calibrated_ohem` with valid-frame masking |
 | Training devices | One DDP job on physical GPUs `0,1,2` |
+| Training throughput | 40 frames, global batch 24, AMP model compute + FP32 F1 loss |
 | Monitoring | SwanLab cloud plus complete local logs |
 | Finalization | Pixel-F1 Top-5 -> centroid sweep -> tracking TXT -> validated ZIP |
 
