@@ -93,6 +93,15 @@ flowchart LR
 - SwanLab cloud 全程记录；Top-5 checkpoint 逐个导出、质心阈值扫描、轨迹化；
 - 最终 ZIP 必须通过结构/帧数校验并生成 SHA256。
 
+正式 run 于 2026-08-27 10:46（Asia/Shanghai）启动：
+
+- 实验目录：`2026-08-27/SatVideoIRSDT_v1__2026-08-27_02-46-06__FeedbackSTS-F1-feedbacksts_t2_recallaug_ddp3_seed47_E100`；
+- [SwanLab run](https://swanlab.cn/@SInt123/CSIG2026-DeepPro/runs/xpep23qnp7y93bnu9pulp)；
+- 预期提交包：`submission/submit_feedbacksts_t2_recallaug_ddp3_seed47_best_proxy_f1.zip`。
+
+10:41 的短暂 run `92bnlg69j3m4qcyokd0a3` 只用于启动前复核，在首个 epoch 内主动
+终止；它缺少 modulation mask，不进入性能对比或 checkpoint 选择。
+
 已完成的代码验收：Python 与 shell 语法、奇数空间尺寸补边、CPU 前反向、真实
 `T=13,128x128` CUDA 前反向、三卡 NCCL/DDP 同步。最终调制形变版本每卡 batch 2
 的三卡 DDP 峰值约 `1.59 GiB`；`1024x1024` AMP 全帧推理峰值约
