@@ -6,7 +6,14 @@
 > **scratch-only**: `train.py` rejects `base_ckpt`, `spatial_ckpt`, and
 > `st_ckpt`. Runtime launchers only allow physical GPUs **0, 1, and 2**.
 
-## CSIG2026 Development Status
+> [!NOTE]
+> The CSIG2026 submission stage is complete. The final scratch-only Hybrid-RMS
+> submission scored **91.30** (submission ID `907655`). Its checkpoint, exact
+> source snapshots, validated ZIP, threshold sweeps, environment, evidence,
+> and reproduction scripts are frozen in
+> [`release/2026-08-29_final_submission_score91.30_scratch/`](release/2026-08-29_final_submission_score91.30_scratch/README.md).
+
+## CSIG2026 Final Submission and Development Status
 
 The current priority candidate is the scratch-only `DeepPro-FeedbackSTS`: a
 five-level 3D U-Net with fixed-interval forward encoder propagation, backward
@@ -16,6 +23,8 @@ decoder propagation, and pyramid deformable alignment. The earlier
 | Item | Current setting |
 |---|---|
 | Dataset | `SatVideoIRSDT_v1` (stored outside this repository) |
+| Final submission | Scratch Hybrid-RMS epoch 86, score **91.30** |
+| Reproducible release | `release/2026-08-29_final_submission_score91.30_scratch/` |
 | Main candidate | `DeepPro-FeedbackSTS` |
 | Scratch website baseline | `raw_apmd_hybrid_rms`: `86.71` |
 | Completed recent runs | scratch-init `86.45`; bandpass `86.47` |

@@ -6,9 +6,13 @@
 
 ## 当前主线
 
+比赛提交阶段已经结束。最终 scratch-only Hybrid-RMS 提交 ID `907655` 得分
+**91.30**；完整 checkpoint、源码快照、环境、最终 ZIP、阈值扫描和复现脚本见
+[`release/2026-08-29_final_submission_score91.30_scratch/`](../release/2026-08-29_final_submission_score91.30_scratch/README.md)。
+
 | 文档 | 内容 | 状态 |
 |---|---|---|
-| [F1 最大化研究与 FeedbackSTS 决策](F1_MAXIMIZATION_RESEARCH_2026-08-27.md) | 86.47 复盘、候选路线对比、新网络/损失/验收与实验判据 | 当前优先实验 |
+| [F1 最大化跨领域研究与 PointCenter 决策](F1_MAXIMIZATION_RESEARCH_2026-08-27.md) | 数据结构、跨领域证据、PointCenter 网络/损失、候选队列与验收判据 | 当前优先实验 |
 | [模型演进、当前框架与损失](MODEL_EVOLUTION_ARCHITECTURE_AND_LOSS_2026-08-26.md) | 从 DeepPro 到当前 BRTD3/Raw-APMD 的结构、框架图、模块增删、优缺点和损失公式 | 当前总览 |
 | [Scratch-only 模型改进](../SCRATCH_MODEL_IMPROVEMENT_2026-08-25.md) | 非零投影、bandpass、detail 三候选的设计与验收 | 当前实验依据 |
 | [网站结果分析](../WEBSITE_RESULTS_ANALYSIS_2026-08-25.md) | 八个历史配对结果、scratch-init 结果及 scratch-only 决策 | 当前策略依据 |
@@ -19,7 +23,7 @@
 - 新训练只能随机初始化；`base_ckpt`、`spatial_ckpt`、`st_ckpt` 均被拒绝；
 - 只允许物理 GPU 0、1、2，GPU3 不进入训练或后处理任务；
 - 三张卡一次训练一个网络；
-- 当前 FeedbackSTS 优先实验使用有记录的 recall-oriented `f1_calibrated_ohem`；
+- 当前优先实验为 scratch PointCenter，使用逐目标中心热图与过滤前后信息一致性；
 - 训练结束必须完成 Top-5、质心阈值扫描、轨迹生成、ZIP 校验和 SHA256；
 - SwanLab 云端异常不能使已经完成的本地训练失效。
 
@@ -52,6 +56,10 @@
 
 ## 实验发布集
 
+`release/2026-08-29_final_submission_score91.30_scratch/` 是最终提交的完整可复现
+发布目录，也是提交阶段结束后的首选入口。它只使用随机初始化训练的 epoch-86
+Hybrid-RMS 权重，包含网站 91.30 分结果记录、自适应阈值证据和端到端重新生成脚本。
+
 `release/2026-08-22_pretrained_vs_scratch_seed47/` 是八组 Hybrid-RMS
 pretrained/scratch 对照的可审计快照，包含选中 checkpoint、训练日志、阈值扫描、提交
 ZIP 和校验和。它保留历史证据，但当前 scratch-only 训练不得加载其中权重。
@@ -62,9 +70,10 @@ ZIP 和校验和。它保留历史证据，但当前 scratch-only 训练不得�
 |---|---|
 | 训练 | `train.py` |
 | 推理/概率导出 | `test.py` |
-| 当前模型 | `networks/models/DeepPro-Plus_BRTD3.py` |
+| 当前模型 | `networks/models/DeepPro-Plus_BRTD3_PointCenter.py` |
 | 结构适配器 | `networks/layers/structure_adapters.py` |
 | 损失函数 | `networks/losses/segmentation_losses.py` |
 | 运行环境和 GPU 白名单 | `tools/project_runtime_env.sh` |
 | 完整结构实验流水线 | `tools/run_structure_candidate_experiment.sh` |
+| PointCenter 三卡训练与自动 ZIP | `tools/run_pointcenter_f1_experiment.sh` |
 | 后处理恢复 | `tools/resume_structure_candidate_postprocess.sh` |

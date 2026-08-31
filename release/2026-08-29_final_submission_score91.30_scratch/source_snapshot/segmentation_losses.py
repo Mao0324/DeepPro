@@ -29,7 +29,6 @@ LOSS_NAMES = (
     'tversky_hard_focal',
     'stc_f1',
     'f1_calibrated_ohem',
-    'center_consistency_f1',
 )
 
 LOSS_DESCRIPTIONS = {
@@ -48,7 +47,6 @@ LOSS_DESCRIPTIONS = {
     'tversky_hard_focal': 'Tversky + Hard-Focal，推荐稳健对照',
     'stc_f1': 'Tversky+Hard-Focal+中心响应+时序一致性实验组合',
     'f1_calibrated_ohem': 'Tversky+Dice+自适应困难负样本Margin，面向F1与低虚警',
-    'center_consistency_f1': 'F1-OHEM+逐目标中心热图+过滤前后信息一致性',
 }
 
 
@@ -116,8 +114,6 @@ class BinarySegmentationLoss(nn.Module):
     """Common interface for losses used by train.py."""
 
     requires_images = False
-    requires_auxiliary = False
-    requires_center_targets = False
 
     def forward(self, logits, target, images=None, epoch=None):
         raise NotImplementedError
@@ -656,179 +652,6 @@ class F1CalibratedOHEMLoss(BinarySegmentationLoss):
         return total
 
 
-class CenterConsistencyF1Loss(F1CalibratedOHEMLoss):
-    """F1 loss aligned with per-object centroid scoring and filtering."""
-
-    component_names = F1CalibratedOHEMLoss.component_names + (
-        'center_focal',
-        'pre_dice',
-        'consistency_kl',
-        'center_weight',
-        'consistency_weight',
-    )
-    requires_auxiliary = True
-    requires_center_targets = True
-
-    def __init__(
-        self,
-        *args,
-        center_weight=0.20,
-        consistency_weight=0.01,
-        consistency_temperature=1.0,
-        **kwargs,
-    ):
-        super().__init__(*args, **kwargs)
-        if center_weight < 0.0 or consistency_weight < 0.0:
-            raise ValueError('Center/consistency weights must be non-negative.')
-        if consistency_temperature <= 0.0:
-            raise ValueError('consistency_temperature must be positive.')
-        self.center_weight = float(center_weight)
-        self.consistency_weight = float(consistency_weight)
-        self.consistency_temperature = float(consistency_temperature)
-
-    @staticmethod
-    def _select_valid_frames(tensor, valid_frames):
-        if valid_frames is None:
-            return tensor.reshape(-1, *tensor.shape[-2:])
-        return tensor[valid_frames]
-
-    def _center_focal_loss(
-        self, center_logits, center_targets, valid_frames
-    ):
-        center_logits = self._select_valid_frames(
-            center_logits, valid_frames
-        )
-        center_targets = self._select_valid_frames(
-            center_targets, valid_frames
-        )
-        # Auxiliary heads are produced under CUDA autocast.  Keep the dense
-        # focal reduction in FP32: in FP16, 1 - 1e-6 rounds to 1 and a
-        # saturated probability can turn log(0) * a false mask into NaN.
-        probability = torch.sigmoid(center_logits.float()).clamp(
-            min=1.0e-6, max=1.0 - 1.0e-6
-        )
-        center_targets = center_targets.float()
-        positive = center_targets.eq(1.0)
-        negative = center_targets.lt(1.0)
-        negative_weight = (1.0 - center_targets).pow(4.0)
-        positive_probability = probability[positive]
-        negative_probability = probability[negative]
-        positive_loss = (
-            torch.log(positive_probability)
-            * (1.0 - positive_probability).pow(2.0)
-        ).sum()
-        negative_loss = (
-            torch.log1p(-negative_probability)
-            * negative_probability.pow(2.0)
-            * negative_weight[negative]
-        ).sum()
-        positive_count = positive.sum().to(dtype=probability.dtype)
-        if positive_count.item() == 0:
-            return -negative_loss / max(1, negative.numel())
-        return -(positive_loss + negative_loss) / positive_count
-
-    def _consistency_terms(
-        self, logits, target, pre_logits, valid_frames
-    ):
-        logits = logits.float()
-        target = target.float()
-        pre_logits = pre_logits.float()
-        pre_dice_per_frame = _dice_loss_per_frame(
-            pre_logits, target, self.eps
-        )
-        if valid_frames is None:
-            pre_dice = pre_dice_per_frame.mean()
-        else:
-            pre_dice = pre_dice_per_frame[valid_frames].mean()
-        logits = self._select_valid_frames(logits, valid_frames)
-        pre_logits = self._select_valid_frames(pre_logits, valid_frames)
-        if logits.numel() == 0:
-            return pre_dice, _zero_loss(logits)
-        temperature = self.consistency_temperature
-        filtered_distribution = F.log_softmax(
-            logits.reshape(logits.shape[0], -1) / temperature,
-            dim=-1,
-        )
-        pre_filter_distribution = F.softmax(
-            pre_logits.detach().reshape(pre_logits.shape[0], -1)
-            / temperature,
-            dim=-1,
-        )
-        consistency_kl = F.kl_div(
-            filtered_distribution,
-            pre_filter_distribution,
-            reduction='batchmean',
-        ) * (temperature ** 2)
-        return pre_dice, consistency_kl
-
-    def forward(
-        self,
-        logits,
-        target,
-        images=None,
-        epoch=None,
-        valid_frames=None,
-        auxiliary_predictions=None,
-        center_targets=None,
-    ):
-        logits, target = _prepare_binary_tensors(logits, target)
-        base_loss = super().forward(
-            logits,
-            target,
-            images=images,
-            epoch=epoch,
-            valid_frames=valid_frames,
-        )
-        components = dict(self.last_components)
-        zero = _zero_loss(logits)
-        center_focal = zero
-        pre_dice = zero
-        consistency_kl = zero
-        if auxiliary_predictions is not None:
-            if not isinstance(auxiliary_predictions, dict):
-                raise TypeError('auxiliary_predictions must be a dictionary.')
-            if center_targets is None:
-                raise ValueError(
-                    'center_targets are required with auxiliary predictions.'
-                )
-            center_logits = auxiliary_predictions.get('center_logits')
-            pre_logits = auxiliary_predictions.get('pre_logits')
-            if center_logits is None or pre_logits is None:
-                raise ValueError(
-                    'Auxiliary predictions require center_logits/pre_logits.'
-                )
-            center_logits, center_targets = _prepare_binary_tensors(
-                center_logits, center_targets
-            )
-            pre_logits, prepared_target = _prepare_binary_tensors(
-                pre_logits, target
-            )
-            if center_logits.shape != logits.shape \
-                    or pre_logits.shape != logits.shape:
-                raise ValueError('Auxiliary prediction shapes must match logits.')
-            del prepared_target
-            center_focal = self._center_focal_loss(
-                center_logits, center_targets, valid_frames
-            )
-            pre_dice, consistency_kl = self._consistency_terms(
-                logits, target, pre_logits, valid_frames
-            )
-        total = (
-            base_loss
-            + self.center_weight * center_focal
-            + self.consistency_weight * 0.5 * (pre_dice + consistency_kl)
-        )
-        components.update({
-            'center_focal': center_focal.detach(),
-            'pre_dice': pre_dice.detach(),
-            'consistency_kl': consistency_kl.detach(),
-            'center_weight': logits.new_tensor(self.center_weight),
-            'consistency_weight': logits.new_tensor(self.consistency_weight),
-        })
-        self.last_components = components
-        return total
-
-
 def _gaussian_kernel(kernel_size, sigma):
     coordinates = torch.arange(kernel_size, dtype=torch.float32)
     coordinates = coordinates - (kernel_size - 1) * 0.5
@@ -934,11 +757,6 @@ def _validate_parameters(
     hard_focal_weight, sls_location_weight, sls_warmup_epochs,
     tda_weight, tda_mean_size, tda_mean_contrast, tda_dilation,
     stc_center_weight, stc_temporal_weight, stc_warmup_epochs,
-    f1_ohem_dice_weight, f1_ohem_hard_weight,
-    f1_ohem_negative_ratio, f1_ohem_min_negatives,
-    f1_ohem_margin, f1_ohem_warmup_epochs, f1_ohem_ramp_epochs,
-    point_center_weight, point_consistency_weight,
-    point_consistency_temperature,
 ):
     if name not in LOSS_NAMES:
         raise ValueError(
@@ -962,25 +780,6 @@ def _validate_parameters(
         raise ValueError('Combined-loss weights must be non-negative.')
     if stc_center_weight < 0.0 or stc_temporal_weight < 0.0:
         raise ValueError('STC weights must be non-negative.')
-    if name in {'f1_calibrated_ohem', 'center_consistency_f1'}:
-        if f1_ohem_dice_weight < 0.0 or f1_ohem_hard_weight < 0.0:
-            raise ValueError('F1 OHEM component weights must be non-negative.')
-        if f1_ohem_negative_ratio <= 0.0:
-            raise ValueError('F1 OHEM negative ratio must be positive.')
-        if f1_ohem_min_negatives <= 0:
-            raise ValueError('F1 OHEM minimum negatives must be positive.')
-        if f1_ohem_min_negatives > hard_negative_topk:
-            raise ValueError(
-                'F1 OHEM minimum negatives cannot exceed hard_negative_topk.'
-            )
-        if f1_ohem_margin < 0.0:
-            raise ValueError('F1 OHEM margin must be non-negative.')
-        if f1_ohem_warmup_epochs < 0 or f1_ohem_ramp_epochs <= 0:
-            raise ValueError('F1 OHEM warm-up/ramp settings are invalid.')
-    if point_center_weight < 0.0 or point_consistency_weight < 0.0:
-        raise ValueError('Point-center loss weights must be non-negative.')
-    if point_consistency_temperature <= 0.0:
-        raise ValueError('Point-center consistency temperature must be positive.')
     if sls_warmup_epochs < 0 or stc_warmup_epochs < 0:
         raise ValueError('Warm-up epochs must be non-negative.')
     if tda_mean_size < 0.0 or tda_mean_contrast < 0.0:
@@ -1010,16 +809,6 @@ def build_segmentation_loss(
     stc_center_weight=0.1,
     stc_temporal_weight=0.05,
     stc_warmup_epochs=5,
-    f1_ohem_dice_weight=0.15,
-    f1_ohem_hard_weight=0.10,
-    f1_ohem_negative_ratio=4.0,
-    f1_ohem_min_negatives=256,
-    f1_ohem_margin=1.0,
-    f1_ohem_warmup_epochs=5,
-    f1_ohem_ramp_epochs=10,
-    point_center_weight=0.05,
-    point_consistency_weight=0.01,
-    point_consistency_temperature=1.0,
 ):
     """Build one of the command-line selectable losses."""
     _validate_parameters(
@@ -1028,11 +817,6 @@ def build_segmentation_loss(
         hard_focal_weight, sls_location_weight, sls_warmup_epochs,
         tda_weight, tda_mean_size, tda_mean_contrast, tda_dilation,
         stc_center_weight, stc_temporal_weight, stc_warmup_epochs,
-        f1_ohem_dice_weight, f1_ohem_hard_weight,
-        f1_ohem_negative_ratio, f1_ohem_min_negatives,
-        f1_ohem_margin, f1_ohem_warmup_epochs, f1_ohem_ramp_epochs,
-        point_center_weight, point_consistency_weight,
-        point_consistency_temperature,
     )
     if name == 'soft_iou':
         return LegacySoftIoULoss()
@@ -1077,28 +861,6 @@ def build_segmentation_loss(
     if name == 'f1_calibrated_ohem':
         return F1CalibratedOHEMLoss(
             tversky_fp_weight, tversky_fn_weight, eps,
-            dice_weight=f1_ohem_dice_weight,
-            hard_weight=f1_ohem_hard_weight,
-            negative_ratio=f1_ohem_negative_ratio,
-            min_negatives=f1_ohem_min_negatives,
             max_negatives=hard_negative_topk,
-            margin=f1_ohem_margin,
-            warmup_epochs=f1_ohem_warmup_epochs,
-            ramp_epochs=f1_ohem_ramp_epochs,
-        )
-    if name == 'center_consistency_f1':
-        return CenterConsistencyF1Loss(
-            tversky_fp_weight, tversky_fn_weight, eps,
-            dice_weight=f1_ohem_dice_weight,
-            hard_weight=f1_ohem_hard_weight,
-            negative_ratio=f1_ohem_negative_ratio,
-            min_negatives=f1_ohem_min_negatives,
-            max_negatives=hard_negative_topk,
-            margin=f1_ohem_margin,
-            warmup_epochs=f1_ohem_warmup_epochs,
-            ramp_epochs=f1_ohem_ramp_epochs,
-            center_weight=point_center_weight,
-            consistency_weight=point_consistency_weight,
-            consistency_temperature=point_consistency_temperature,
         )
     raise AssertionError('unreachable loss selection: %s' % name)

@@ -1,0 +1,11 @@
+PARAMETER ...
+Namespace(amp=True, attribution=False, batch_size=1, centroid_dir=None, centroid_threshold=0.5, centroid_txt=False, datapath='/home/user/4T_Storage/SJY/CSIG2026/DeepPro-main/../datasets/SatVideoIRSDT_v1', dataset='SatVideoIRSDT_v1', epoch=86, eval_chunk_rows=16, gpu='0', log_dir='2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_scratch_seed47_E100', logpath='/home/user/4T_Storage/SJY/CSIG2026/DeepPro-main/log', output_only=True, overwrite_outputs=True, prefetch_factor=1, profile_flops=False, seqlen=40, sequence_start=218, sequence_stop=None, split='test', test_workers=2, threshold_eval=0.5, visual=True, visual_count=0, visual_dir='/home/user/4T_Storage/SJY/CSIG2026/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_scratch_seed47_E100/final_test/2026-08-29_20-29-34/probabilities', visual_seed=46)
+start loading test data ...
+/home/user/anaconda3/envs/sjyPID/lib/python3.8/site-packages/torch/_utils.py:831: UserWarning: TypedStorage is deprecated. It will be removed in the future and UntypedStorage will be the only storage class. This should only matter to you if you are using storages directly.  To access UntypedStorage directly, use tensor.untyped_storage() instead of tensor.storage()
+  return self.fget.__get__(instance, owner)()
+Inference precision: CUDA FP16 autocast with FP32 sigmoid
+---- EVALUATION----
+  0%|          | 0/2 [00:00<?, ?it/s] 50%|█████     | 1/2 [01:16<01:16, 76.62s/it]100%|██████████| 2/2 [02:24<00:00, 68.80s/it]100%|██████████| 2/2 [02:24<00:00, 72.32s/it]
+Evaluation elapsed time: 144.70 seconds for 79 windows.
+CUDA peak memory: allocated=22.079 GiB, reserved=23.068 GiB.
+Done!

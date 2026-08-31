@@ -1,139 +1,267 @@
-# F1 最大化研究与 FeedbackSTS 优先实验（2026-08-27）
+# SatVideoIRSDT_v1 F1 最大化：跨领域证据与 PointCenter 决策（2026-08-27）
 
-## 决策摘要
+## 结论先行
 
-最新 bandpass 网站分数为 `86.47`（ID `903589`），只比 scratch-init 的 `86.45`
-高 `0.02`，仍比当前 scratch 基线 `86.71` 低 `0.24`。本地 Proxy F1 的相对方向一致：
-`0.772087 > 0.771051`，但仍低于基线 `0.774414`。因此停止把轻量 Raw-APMD 增量作为
-优先路线，首选独立的 `DeepPro-FeedbackSTS` 网络。
+当前最值得优先验证的方案不是继续堆叠 FeedbackSTS 形变对齐，而是以网站已经验证的
+scratch Hybrid-RMS 为母体，加入三个与当前误差直接对应的机制：
 
-该选择不是因为参数更少，而是因为它同时满足四个条件：直接针对卫星红外视频；显式
-处理跨帧位移；能利用 40 帧双向语义；原论文在 IRSatVideo 上相对 RFR 报告了更高 F1。
-新实现不加载任何预训练权重。
+1. **逐连通目标中心热图**：直接监督每一个目标中心，而不是用整帧掩码的全局中心；
+2. **全分辨率局部—时序门控恢复块**：在不下采样目标的情况下扩大局部/时序信息交换；
+3. **背景调制过滤与过滤前后信息一致性**：降低虚警，同时用很弱的一致性项防止过滤掉
+   只有数个像素的小目标。
 
-最初启动器曾照搬官方多 GPU 命令示例中的 `seq_len=13`。官方单 GPU 示例实际使用
-`seq_len=5`，两者都是针对 IRSatVideo-LEO/NUDT-MIRSDT 的配置，并不是当前
-SatVideoIRSDT 的长度消融结论。由于本项目 baseline、数据管线默认值和已有长时序
-证据均为 `40` 帧，且当前准则是 F1 优先，13 帧任务在产生验证 F1 前即终止；正式
-候选恢复为训练、验证和提交推理全程 `seqlen=40`。
+实现名为 `DeepPro-Plus_BRTD3_PointCenter`，训练损失为
+`center_consistency_f1`。它没有外部 teacher，也不加载任何预训练权重。所谓一致性是同一
+网络、同一次前向中“过滤前预测”和“过滤后最终预测”的约束；过滤前头同时接受 Dice
+深监督，KL 中只把它视为停止梯度的参考分布。
 
-## 当前误差诊断
+这仍然只是**高优先级候选**。有效改进的最终证据必须是 scratch 网站分数超过
+`86.71`，不能由论文机制、参数量、训练验证 F1 或本地 Proxy F1 单独替代。
 
-| 模型 | 网站 | Proxy F1 | Precision | Recall | FP | FN |
+## 已有证据与误差结构
+
+| Scratch 实验 | 网站分数 | Proxy F1 | Precision | Recall | FP | FN |
 |---|---:|---:|---:|---:|---:|---:|
-| Hybrid-RMS scratch 基线 | 86.71 | 0.774414 | 0.948090 | 0.654517 | 3,153 | 30,397 |
+| Hybrid-RMS 基线 | **86.71** | **0.774414** | 0.948090 | 0.654517 | 3,153 | 30,397 |
 | scratch-init | 86.45 | 0.771051 | 0.954120 | 0.646924 | - | - |
 | scratch-bandpass | 86.47 | 0.772087 | 0.943955 | 0.653164 | 3,412 | 30,516 |
 
-bandpass 的 FN 是 FP 的 `8.94` 倍，占两类检测错误的 `89.95%`。训练目标却长期使用
-Tversky `FP=0.6 / FN=0.4`，并保留最多 4 倍正样本数的困难负样本，方向上继续强化了
-已经很高的 Precision。验证集目标面积中位数仅 6 像素，`79.2%` 不超过 9 像素；
-模型还缺少跨位置对齐和多尺度解码。这三点共同解释了低 Recall，而不是单纯训练时长
-不足。
+基线 Proxy 的 FN 是 FP 的 `9.64` 倍，但它的 Precision 已达 `0.9481`。因此目标不是
+无条件提高 Recall，而是增加真实目标中心响应，同时继续限制新增 FP。此前将 Tversky
+改成强 Recall 倾向的 FeedbackSTS run 在同 epoch 下出现“Recall 上升、Precision 大幅
+下降、F1 反而下降”，构成反证；本轮恢复网站最佳基线的 `FP/FN=0.6/0.4`，把 Recall
+改进交给逐目标中心监督，而不是继续降低负样本约束。
 
-## 文献路线比较
+基线数据来自：
+`log/sem_seg/2026-08-22/...hybrid_rms_scratch_seed47_E100/postprocess/results/selected_submission.json`。
+其中 epoch 86、threshold 0.22、min area 2 得到 TP/FP/FN=
+`57587/3153/30397`。
 
-| 路线 | 与本任务匹配 | Scratch-only | 主要风险 | 决定 |
-|---|---|---|---|---|
-| FeedbackSTS-Det | 卫星视频、mask、长时序、形变对齐、双向反馈 | 官方入口可随机初始化 | DCN 计算较重 | **首选** |
-| RFR | 卫星视频、PDA、循环细化 | 可随机初始化 | IRSatVideo 报告 F1 低于 FeedbackSTS | 备选机制 |
-| MSHNet/SLS | 小目标尺度与位置敏感、多尺度监督 | 可随机初始化 | 主要是单帧检测 | 第二阶段损失/解码器候选 |
-| MI-DETR | 原始外观与运动双流 | 可随机初始化 | bbox/DETR 与当前逐帧 mask、质心提交不一致 | 暂缓 |
-| TDCNet/MOCID | 强时空表示 | 高分配置依赖冻结或预训练分支 | 违反项目 scratch-only 约束 | 排除首轮 |
+## 数据集结构决定了哪些损失可用
 
-关键原始资料：
+数据根目录：
 
-- [FeedbackSTS-Det, Remote Sensing 2026](https://www.mdpi.com/2072-4292/18/12/2042)
-  与[官方实现](https://github.com/IDIP-Lab/FeedbackSTS-Det)；
-- [RFR, arXiv 2409.12448](https://arxiv.org/abs/2409.12448) 与
-  [官方实现](https://github.com/XinyiYing/RFR)；
-- [MSHNet/SLS, CVPR 2024](https://openaccess.thecvf.com/content/CVPR2024/html/Liu_Infrared_Small_Target_Detection_with_Scale_and_Location_Sensitivity_CVPR_2024_paper.html)
-  与[官方实现](https://github.com/ying-fu/MSHNet)；
-- [CenterNet: Objects as Points](https://arxiv.org/abs/1904.07850)，作为后续直接中心监督的依据。
+```text
+/home/user/4T_Storage/SJY/CSIG2026/datasets/SatVideoIRSDT_v1
+```
 
-## 新网络
+对训练 mask 每 20 帧抽样一次，共检查 `4,990` 帧，并采用 8 连通域统计：
+
+| 统计量 | 结果 |
+|---|---:|
+| 空帧 | 1.784% |
+| 恰好一个目标 | 17.776% |
+| 多目标帧 | **80.441%** |
+| 单帧最多连通目标 | 10 |
+| 连通域面积 p50 / p90 / p99 | **6 / 13 / 30 px** |
+| 最大面积 | 159 px |
+
+由此得到两个强约束：
+
+- 约 80% 是多目标帧，所以原 SLS 风格“整帧预测中心对整帧 GT 中心”的位置项会把多个
+  目标压成一个位于它们之间的虚构中心，不能直接使用；必须逐连通域生成中心峰，或使用
+  一对一集合匹配。
+- 目标面积中位数只有 6 像素，深层下采样后再上采样很容易彻底丢失目标；首个候选必须
+  保留全分辨率表示。
+
+复核命令的逻辑为：按排序后的训练 mask 每 20 个取一个，二值化后执行
+`cv2.connectedComponentsWithStats(..., connectivity=8)`，记录每帧组件数及 `CC_STAT_AREA`。
+这是一项本地数据诊断，不是论文结论。
+
+## 跨领域证据矩阵
+
+检索日期为 2026-08-27。纳入标准：论文原文或官方实现；机制能迁移到稀疏微小目标的
+特征提取、跨帧融合或中心定位；能完全随机初始化。排除标准：核心能力依赖基础模型或
+预训练 backbone；只报告与本任务无关的生成质量指标；会破坏全分辨率微小目标。
+
+| 来源领域与原始资料 | 可迁移机制 | 对本任务的判断 | 证据级别 |
+|---|---|---|---|
+| 目标检测：[CenterNet / Objects as Points](https://arxiv.org/abs/1904.07850) | 每个对象生成中心高斯热图，用 focal 训练峰值 | 与最终质心匹配直接对齐；本轮采用逐组件中心头 | B：原始论文 |
+| 人群点定位：[P2PNet, ICCV 2021](https://openaccess.thecvf.com/content/ICCV2021/html/Song_Rethinking_Counting_and_Localization_in_Crowds_A_Purely_Point-Based_Framework_ICCV_2021_paper.html) | 点集合与 GT 一对一 Hungarian 匹配 | 指标最直接，但 scratch 下集合查询优化风险较高，列为第二候选 | A：同行评审原文 |
+| 姿态估计：[HRNet, CVPR 2019](https://openaccess.thecvf.com/content_CVPR_2019/html/Sun_Deep_High-Resolution_Representation_Learning_for_Human_Pose_Estimation_CVPR_2019_paper.html) | 始终保留高分辨率分支并反复融合 | p50=6 px 时高度相关；本轮先采用不下采样恢复块 | A |
+| 图像恢复：[NAFNet](https://arxiv.org/abs/2204.04676) | 乘法 SimpleGate 与残差缩放 | 适合 scratch，迁移为轻量 3D 局部—时序门控块 | B |
+| 图像恢复：[Restormer, CVPR 2022](https://openaccess.thecvf.com/content/CVPR2022/html/Zamir_Restormer_Efficient_Transformer_for_High-Resolution_Image_Restoration_CVPR_2022_paper.html) | 通道注意力和门控深度卷积 FFN | 证明局部卷积与全局/通道交互的价值；完整 Transformer scratch 风险高，未照搬 | A |
+| 多帧红外：[MIST 官方实现, TIP 2026](https://github.com/ShuCvlab/MIST) | 多邻域运动补偿、调制过滤、渐进信息保留 | 采用背景调制过滤思想；完整 SNCB 依赖本环境没有的 NATTEN，且官方 sufficiency 实现的参考头缺少直接监督，因此未照搬 | 官方源码/论文仓库 |
+| 视频恢复：[BasicVSR++, CVPR 2022](https://openaccess.thecvf.com/content/CVPR2022/html/Chan_BasicVSR_Improving_Video_Super-Resolution_With_Enhanced_Propagation_and_Alignment_CVPR_2022_paper.html) | 二阶双向传播、光流引导形变对齐 | 有理论匹配，但本地 FeedbackSTS 对齐实验已出现严重 Precision 损失，暂不作为首轮 | A |
+| Burst 恢复：[BIPNet, CVPR 2022](https://openaccess.thecvf.com/content/CVPR2022/html/Dudhane_Burst_Image_Restoration_and_Enhancement_CVPR_2022_paper.html) | 对齐后交换互补帧信息、渐进融合 | 支持“先保细节再融合”，但参考帧重建目标与逐帧检测不同 | A |
+| Burst 恢复：[Burstormer, CVPR 2023](https://openaccess.thecvf.com/content/CVPR2023/html/Dudhane_Burstormer_Burst_Image_Restoration_and_Enhancement_Transformer_CVPR_2023_paper.html) | 多尺度形变对齐、参考帧富集、渐进融合 | 作为后续大模型候选；当前没有理由再次优先押注形变对齐 | A |
+| 遥感去云：[UnCRtainTS, CVPRW 2023](https://openaccess.thecvf.com/content/CVPR2023W/EarthVision/html/Ebel_UnCRtainTS_Uncertainty_Quantification_for_Cloud_Removal_in_Optical_Satellite_Time_CVPRW_2023_paper.html) | 分辨率保持的空间块、跨时相注意聚合、不确定性 | 支持保留空间分辨率与选择性时序融合；云不确定性回归不直接迁移 | A |
+| 遥感变化检测：[BIT](https://arxiv.org/abs/2103.00208) | 少量语义 token 建模双时相上下文，再反馈像素空间 | 长程上下文有价值，但目标过小、训练集有限，完整 token 化可能丢点 | B |
+| 异常检测：[DRAEM, ICCV 2021](https://openaccess.thecvf.com/content/ICCV2021/html/Zavrtanik_DRAEM_-_A_Discriminatively_Trained_Reconstruction_Embedding_for_Surface_Anomaly_ICCV_2021_paper.html) | 正常背景重建与判别嵌入联合优化 | 可用于第二阶段背景模型；卫星运动会把配准误差当异常，首轮风险高 | A |
+| 红外检测：[MSHNet/SLS, CVPR 2024](https://openaccess.thecvf.com/content/CVPR2024/html/Liu_Infrared_Small_Target_Detection_with_Scale_and_Location_Sensitivity_CVPR_2024_paper.html) | 多尺度头与尺度/位置敏感损失 | 尺度监督有价值；原位置项是整幅掩码中心，不适合本数据的多目标帧 | A |
+| 卫星视频：[RFR](https://arxiv.org/abs/2409.12448) | 金字塔形变对齐、循环细化、时空频率调制 | 与任务直接相关，但再次引入对齐的边际证据弱于逐中心监督 | B |
+| 医学小病灶：[Blob loss](https://arxiv.org/abs/2205.08209) | 对每个 GT 连通实例分别计算并平均分割损失，避免大实例主导梯度 | 与 p50=6 px、多目标帧直接匹配；若 PointCenter 后期 Recall 停滞，优先作为下一损失候选 | B：IPMI 2023 原文 |
+| 医学分割：[ICI loss, MIDL 2023](https://github.com/BrainImageAnalysis/ICI-loss) | instance-wise 分割与归一化 center-of-instance 联合监督 | 官方实现和当前逐组件中心头高度互补；但预测连通域分析会增加训练开销 | 官方实现/同行评审论文 |
+| 点监督计数：[Where are the Blobs, ECCV 2018](https://openaccess.thecvf.com/content_ECCV_2018/html/Issam_Hadj_Laradji_Where_are_the_ECCV_2018_paper.html) | 约束每个对象一个 blob，并分别惩罚合并 blob 和无 GT 点的假 blob | 与提交端“一连通域一个质心”最直接；适合在错误分析确认合并/重复峰后启用 | A |
+| 人群计数：[DM-Count, NeurIPS 2020](https://proceedings.neurips.cc/paper/2020/hash/118bd558033a1016fcc82560c65cca5f-Abstract.html) | 用最优传输匹配预测密度与点分布，避免固定高斯平滑 | 可替代中心高斯 focal，直接约束多点空间分布；实现和优化风险高于 Blob loss | A |
+
+### 明确没有作为首轮的热门方向
+
+- Mask2Former/P2P-DETR 一类 set prediction 与点级指标契合，但通常需要更长 scratch
+  收敛周期和更复杂的匹配稳定化；当前先用 dense center heatmap 获得同样的逐对象归纳
+  偏置。[Mask2Former 原文](https://openaccess.thecvf.com/content/CVPR2022/html/Cheng_Masked-Attention_Mask_Transformer_for_Universal_Image_Segmentation_CVPR_2022_paper.html)
+- 生成式重建或扩散模型可能提供背景先验，但“重建视觉质量提高”不等于质心 Precision/
+  Recall 提高；在没有独立异常残差证据前不让它取代监督检测主干。
+- 完整 BasicVSR++、Burstormer 或 RFR 的主要变量仍是对齐。当前同类 FeedbackSTS 的本地
+  反证要求我们先测试不同机制，而不是因论文结果更强就重复增加对齐复杂度。
+- 任何依赖 ImageNet、DINO、冻结分支或外部 checkpoint 的实现均排除，即使历史网站
+  分数更高。
+
+## PointCenter 网络
 
 ```mermaid
 flowchart LR
-    X[40帧原始序列 Bx1xTxHxW] --> E1[8ch 3D块 + 前向SSM]
-    E1 --> P1[空间下采样]
-    P1 --> E2[16ch + 前向SSM]
-    E2 --> E3[32ch + 前向SSM]
-    E3 --> E4[64ch + 前向SSM]
-    E4 --> E5[128ch + 前向SSM]
-    E5 --> D4[上采样 + skip + 后向SSM]
-    D4 --> D3[上采样 + skip + 后向SSM]
-    D3 --> D2[上采样 + skip + 后向SSM]
-    D2 --> D1[上采样 + skip + 后向SSM]
-    D1 --> H[1x1x1 logits头]
-    H --> Y[40帧分割logits]
+    X[40帧 Bx1xTxHxW] --> S[SDifferenceConv + 两个 STD ResBlock]
+    S --> R[Hybrid-RMS Raw-APMD<br/>原始外观 + 一/二阶运动]
+    R --> T[TPro 40帧投影]
+    T --> P[32→16ch 全分辨率投影]
+    P --> G1[NAF式 3D 门控恢复块 ×2]
+    G1 --> V[过滤前 pre head]
+    G1 --> M[通道/空间调制 + 过滤块 ×2]
+    M --> H1[mask head]
+    M --> H2[逐目标 center head]
+    H1 --> F[mask logits + 0.25 × center logits]
+    H2 --> F
+    V -. 0.01 信息一致性 .-> F
+    F --> Y[40帧最终 logits]
 ```
 
-每个 SSM 按固定间隔 `T=2` 把帧分组，在组内用两级金字塔形变卷积把当前特征对齐到
-传播语义。编码器从过去向未来传播，解码器从未来向过去传播；3D 卷积分支保留局部
-时空上下文，残差反馈分支提供长程对齐。五级 U-Net 恢复了旧模型缺少的多尺度语义与
-细节融合。实现使用 torchvision 维护的 `DeformConv2d`，并保持全随机初始化。
+关键实现：
 
-## 数据与损失改动
+- `networks/models/DeepPro-Plus_BRTD3_PointCenter.py`
+- `data_utils/TrainDataLoader.py`：裁剪与几何增强完成后，对每帧 8 连通域分别生成
+  `sigma=1.25` 的高斯中心峰；一个连通目标恰好有一个值为 1 的峰。
+- `networks/losses/segmentation_losses.py`：`center_consistency_f1`。
 
-训练启用与官方数据策略一致的标签保持变换：水平/垂直翻转、转置和时间反转。损失仍
-为可审计的 `f1_calibrated_ohem`，但根据本地错误结构改为：
+CenterNet 风格中心头偏置初始化为 `-2.19`，初始正类概率约 `0.10`，避免全分辨率负点
+在训练初期淹没稀疏正点。最终融合仍保留 mask 形状，提交端继续使用统一连通域质心提取
+和轨迹后处理。
 
-| 参数 | 旧值 | 新值 | 目的 |
-|---|---:|---:|---|
-| Tversky FP/FN | 0.60 / 0.40 | 0.35 / 0.65 | 提高漏检代价 |
-| hard negative ratio | 4.0 | 1.5 | 减少负样本主导 |
-| max/min negatives | 4096 / 256 | 2048 / 128 | 保留校准但降低抑制强度 |
-| Dice weight | 0.15 | 0.20 | 强化整体重叠 |
-| hard-margin weight | 0.10 | 0.05 | 降低背景排序项权重 |
+2026-08-28 的真实 DDP 稳定性检查发现，四个乘法门控块使用 `beta/gamma=0.1` 时，第二个
+过滤块会在个别 clip 的单个时空位置发生 FP16 溢出。最终实现按 NAF 式残差块改为
+`beta/gamma=0` 的恒等初始化，并让恢复过滤分支使用 BF16；主干仍为 FP16，所有损失
+归约保持 FP32。首次 epoch 2/4 全分辨率验证进一步发现过滤器之前的两个恢复块仍可能
+产生极少量 FP16 溢出，因此代码把这两个块也纳入 BF16 边界，并从有限的 epoch 4
+scratch checkpoint 恢复。epoch 5 全量验证损失恢复为有限值 `0.598160`，证明修正已
+生效。BF16 与 FP16 同为两字节激活，但指数范围足以避免门控乘法
+溢出，因此没有用全分辨率 FP32 恢复分支增加 `test.py` 显存。训练循环还会跨三个 rank
+同步检查非有限 loss，异常时立即失败并输出各头的有限元素统计。
 
-结构与损失同时改变会降低单变量归因能力，但本轮目标是最大化最终 F1，而不是做机制
-消融。若首轮失败，下一轮将固定结构分别恢复旧损失、加入中心高斯辅助头，以定位失败
-来自网络还是 Recall 权重。
+## 当前损失
 
-## 运行与验收
+总损失：
 
-- 物理 GPU：仅 `0,1,2`，一个三进程 DDP 网络；
-- 序列/patch：`40 / 128`；全局 batch `24`（每卡 `8`）；历史 40 帧实验使用
-  global batch `18/20`，本轮只做适度扩大；
-- Adam，学习率 `1e-3`；训练网络前反向使用 AMP，F1 loss 与困难样本排序保持 FP32；
-  当前正式任务保持启动时的 `100 epoch / step_size 10`、hard-OHEM
-  warm-up/ramp `5/10`、early stopping 从 epoch `20` 开始；
-  5 epoch 一次三卡分片验证；
-- SwanLab cloud 全程记录；Top-5 checkpoint 逐个导出、质心阈值扫描、轨迹化；
-- 最终 ZIP 必须通过结构/帧数校验并生成 SHA256。
+```text
+L = L_tversky
+  + 0.15 * L_dice
+  + ramp(epoch) * 0.10 * L_hard_margin
+  + 0.05 * L_component_center_focal
+  + 0.01 * 0.5 * (L_pre_dice + L_pre_post_KL)
+```
 
-11:10 的 40 帧 FP32 batch 6 run 与 11:18 的 AMP batch 18 run 都在首轮形成 checkpoint
-前主动终止，分别用于确认时序成本和吞吐，不进入性能比较。最终正式 run 从随机权重启动：
+- `Tversky FP/FN=0.6/0.4`、OHEM ratio/min/max=`4/256/4096` 完全沿用网站最佳 scratch
+  基线，避免再次因过度追 Recall 导致 Precision 崩塌。
+- `component_center_focal` 对每个连通目标的高斯中心监督；这是与质心 F1 最直接的新项。
+- `pre_dice` 使过滤前参考头本身学习目标，而不是随机参考。
+- `pre_post_KL` 仅约束过滤后空间分布不要丢失过滤前已学到的信息；不存在第二模型、
+  EMA teacher 或预训练 teacher。
+- 验证/推理不需要中心标签；辅助项只在训练时启用。
 
-- 实验目录：`2026-08-27/SatVideoIRSDT_v1__2026-08-27_03-23-00__FeedbackSTS-F1-feedbacksts_l40_t2_recallaug_ddp3_seed47_E100`；
-- [SwanLab run](https://swanlab.cn/@SInt123/CSIG2026-DeepPro/runs/78j2ga6249hmwbzqsdzhq)；
-- 预期提交包：`submission/submit_feedbacksts_l40_t2_recallaug_ddp3_seed47_best_proxy_f1.zip`。
+## 验证结果与正式配置
 
-15:11 曾考虑在 checkpoint 处切换为更新次数等价的 `130 / 13` 调度，但停止权限未获批，
-且连续收敛证据优先，因此该方案已取消。当前进程不暂停；专用恢复脚本也保持原
-`100 / 10 / 5 / 10` 调度，避免意外恢复时改变实验定义。更新次数等价方案只可作为
-未来独立候选，不能混入本 run。
+已通过：
 
-当前 DataLoader 实测为 3850 个 40 帧滑窗，batch 24 时为 160 step/epoch；显存约
-`15.0 GiB allocated / 15.75 GiB reserved`。训练 AMP 的三步测试不存在非有限 loss/梯度，
-时序 residue chain 的等价批量化在前向和输入梯度上最大误差均为 `0.0`；每卡 batch 8
-稳态约 `1.272 s/step`，正式 DDP 预计约 4–5 分钟/epoch。旧的 13 帧 batch 6 实验在 epoch 3 后终止，
-13 帧 batch 24 重启实验在 epoch 2 中终止，均没有完整验证 F1，不进入候选比较。
+- Python 编译、shell `bash -n`、`git diff --check`；
+- 合成双目标热图：两个组件得到两个中心峰；
+- 真实 SatVideoIRSDT_v1 样本：40 帧 crop 中 `102` 个组件对应 `102` 个峰；
+- CPU `B=1,T=40,16×16` 前向、损失、反向；pre/center/mask/restoration/Hybrid-RMS
+  分支梯度有限；零初始化门控块在初始状态严格为恒等映射且 `beta/gamma` 梯度有限；
+- 饱和 FP16 辅助 logits（`±20`）下，中心 focal、KL、总损失及梯度均为有限值；
+- 单卡正式 batch 7 的混合 FP16/BF16 连续 5 次更新，loss 从 `3.230710` 降到
+  `2.645057`，GradScaler 保持 `1024`，峰值显存 `19.269 GiB`；
+- 三卡真实数据第 1 epoch 的 183 step 全部有限，mean loss `1.033792`，GradScaler
+  仍为 `1024`；Tversky/Dice/center focal/pre-Dice/KL 分别为
+  `0.745723/0.769528/3.244569/0.841787/1.240436`。
+- epoch 2 训练 mean loss `0.518721`、训练 pixel F1 `0.453926`；首次验证得到
+  P/R/F1=`0.439074/0.209471/0.283630`。相同 scratch-init HRMS 的 epoch 2 验证 F1
+  为 `0.005731`，说明当前候选早期收敛显著更快，但尚不能外推为最终 Proxy/网站提升。
+  该轮 `Eval mean loss` 因上述全分辨率 FP16 溢出为 NaN，有限的阈值化 P/R/F1 与
+  checkpoint 选优未受影响；随后已由 epoch 5 的扩展 BF16 全量验证完成复验。
+- epoch 4 训练 P/R/F1=`0.730264/0.383649/0.503028`，旧精度边界下验证
+  P/R/F1=`0.654075/0.276139/0.388332`，但验证损失仍为 NaN；这是执行可恢复重启的
+  直接证据。
+- epoch 5 使用扩展 BF16 恢复分支从同一 scratch 轨迹续训，训练
+  P/R/F1=`0.745844/0.385507/0.508291`；255 个序列的验证损失为有限值 `0.598160`，
+  验证 P/R/F1=`0.757001/0.298064/0.427717`。验证 fail-fast 未触发，latest、epoch 5、
+  best checkpoint 均成功保存。
 
-10:41 的短暂 run `92bnlg69j3m4qcyokd0a3` 只用于启动前复核，在首个 epoch 内主动
-终止；它缺少 modulation mask，不进入性能对比或 checkpoint 选择。
+截至 epoch 100，与网站 86.71 对应的原 Hybrid-RMS scratch run 使用相同验证阈值 0.5
+进行同 epoch 比较：
 
-已完成的代码验收：Python 与 shell 语法、奇数空间尺寸补边、CPU 前反向、真实
-`T=13,128x128` CUDA 前反向、三卡 NCCL/DDP 同步，以及正式 `T=40` 三卡训练启动。
-当前验证仍使用 AMP 与 1024 tile 上限；训练/推理序列长度由同一个
-`FEEDBACK_SEQ_LEN=40` 传递并由启动器强制检查。
+| Epoch | PointCenter pixel F1 | Hybrid-RMS scratch pixel F1 | 差值 |
+|---:|---:|---:|---:|
+| 20 | 0.501711 | 0.488467 | +0.013244 |
+| 30 | 0.503191 | 0.510571 | -0.007380 |
+| 40 | 0.497786 | 0.508286 | -0.010500 |
+| 50 | 0.512574 | 0.496691 | +0.015883 |
+| 60 | **0.520415** | 0.509729 | **+0.010686** |
+| 65 | 0.516743 | 0.511622 | +0.005121 |
+| 70 | 0.518505 | 0.516374 | +0.002131 |
+| 75 | 0.514074 | 0.517475 | -0.003401 |
+| 80 | 0.509955 | 0.509633 | +0.000322 |
+| 85 | 0.511719 | 0.510194 | +0.001525 |
+| 90 | **0.535337** | 0.515696 | **+0.019641** |
+| 95 | 0.524629 | 0.518108 | +0.006521 |
+| 100 | 0.524148 | 0.516158 | +0.007990 |
 
-## 晋级与证伪标准
+PointCenter 最佳更新为 epoch 90：P/R/F1=`0.755385/0.414570/0.535337`。相对原基线
+同 epoch 的 F1 提高 `0.019641`；相对原基线全程最佳 epoch 86 的 `0.526607` 仍提高
+`0.008730`。增益主要来自 Recall，但 Precision 相对基线 epoch 86 的 `0.781793`
+下降 `0.026408`。epoch 95/100 仍比同 epoch 基线高 `0.006521/0.007990`，说明后段
+并非只有单点尖峰；但该结果仍只支持完成 Top-3 centroid Proxy 扫描，不能替代网站验证。
 
-1. 训练结束自动选择本地质心 Proxy F1 Top-5；
-2. Proxy F1 必须先超过 `0.774414` 才值得网站提交；
-3. 网站必须超过 `86.71` 才能替换基线；
-4. 若只提升 Recall 但 FP 激增导致 F1 不升，先做阈值/最小面积校准，不把 Recall 单项
-   写成模型成功；
-5. 单 seed 胜出后补 seed 49；没有网站结果前只称“候选”，不称“有效改进”。
+正式启动器：`tools/run_pointcenter_f1_experiment.sh`。
+
+| 项目 | 配置 |
+|---|---|
+| GPU | 物理 `0,1,2`，一个网络、三进程 DDP |
+| 初始化 | `base_ckpt/spatial_ckpt/st_ckpt` 全空；日志再次审计 random init |
+| 序列 / patch | `40 / 128` |
+| batch | global `21`，每卡 `7`；接近历史最佳 global 20 并留显存余量 |
+| 优化 | Adam；主干保持历史有效 LR `0.005`，BRTD LR `0.001`；主干 FP16、恢复过滤分支 BF16、loss FP32；GradScaler 初值 `1024` |
+| 加载 | 总 worker `12`，DDP 每 rank `4`；相对总 worker 6 的早期同窗口吞吐约提高 15% |
+| 训练 | 100 epoch；早期每 2 epoch 验证，完成数值验收后每 5 epoch 三卡分片验证；不提前停止 |
+| 记录 | SwanLab cloud，含总损失、各损失分量、P/R/F1 |
+| 交付 | Top-3 checkpoint 概率导出、阈值/面积扫描、轨迹化、ZIP 校验、SHA256 |
+
+## 候选队列与证伪规则
+
+1. **PointCenter（当前）**：若 Proxy F1 超过 `0.774414`，生成 ZIP 并提交网站；网站
+   超过 `86.71` 才升级基线。
+2. **逐实例等权分割**：若 PointCenter Precision 保持较高但 Recall/Proxy FN 停滞，先把
+   Blob/ICI 的 per-component Dice/Tversky 作为独立 loss 候选；它复用现有 GT 连通域，
+   比重建新网络或 Hungarian 集合优化更低风险。当前中心 focal 已让每个中心峰等权，
+   因此该候选只补偿 mask 分支仍按像素面积加权的部分，不能预设一定增益。
+3. **一 blob 一点约束**：若错误分析出现相邻目标合并或一个目标重复峰，再迁移 LC-FCN
+   的 split/false-positive 项；若主要问题是整帧漏计，再测试 DM-Count 式分布/计数约束。
+4. **点集合一对一预测**：只有 dense center 仍产生无法由 blob 约束解决的重复/漏配，
+   才把 P2PNet 的 Hungarian 一对一匹配迁移为独立候选，不与当前 run 混改。
+5. **高分辨率多分支**：若中心头学得稳定但弱目标仍漏检，增加 HRNet 风格 1×/2×/4×
+   并行表示；保持逐目标中心损失。
+6. **显式背景重建残差**：只有在误检可由背景可预测性分开时才引入 DRAEM/重建耦合；
+   必须先验证卫星运动不会制造大面积伪异常。
+7. **完整对齐传播**：只有 PointCenter 失败且误差按运动速度显著分层时，才重新考虑
+   BasicVSR++/Burstormer/RFR；否则现有 FeedbackSTS 反证优先。
+
+任何一轮都执行同一判据：Proxy 只负责筛选，网站分数负责确认；单 seed 胜出后补 seed
+49；只提高 Recall、只提高 pixel F1、只生成 ZIP 或只完成梯度测试都不能称为模型提升。
+
+## 限制与披露
+
+- 跨领域论文主要在各自数据和指标上证明机制有效，不能直接证明 SatVideoIRSDT_v1 F1
+  会提升；本文件的排序是基于机制—误差匹配的可证伪推断。
+- 每 20 帧抽样统计足以暴露多目标与微小面积结构，但不是全训练集精确普查。
+- 网站评分函数不是完全公开；本地 Proxy 与网站方向在最近 scratch 实验上一致，但数值
+  不等价。
+- 本研究与文档由 AI 辅助完成；实验数值来自仓库日志、JSON、真实数据统计或用户提供的
+  网站结果，论文机制通过上述原文/官方仓库核验。

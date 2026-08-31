@@ -1,0 +1,1 @@
+VALID archive=/home/user/4T_Storage/SJY/CSIG2026/DeepPro-main/log/sem_seg/2026-08-22/SatVideoIRSDT_v1__2026-08-22_08-27-32__F1OHEM-brtd3_raw_apmd_hybrid_rms_scratch_seed47_E100/final_test/2026-08-29_20-29-34/submit_hrms_scratch_epoch86_adaptive_thr0p16_highres0p96.zip sequences=220 frames=21285 detections=48673
